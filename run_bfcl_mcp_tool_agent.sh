@@ -6,7 +6,6 @@ export VLLM_USE_V1=1
 export HF_HUB_OFFLINE=1 # disable hf when offline
 
 PROJECT_DIR="$(pwd)"
-OUTPUT_DIR="/data/user/minruixu/outputs"
 CONFIG_PATH="$PROJECT_DIR/tools/configs"
 CONFIG_NAME="bfcl_multiturn_grpo"
 TIMESTAMP="$(date +"%Y%m%d-%H%M")"
@@ -20,8 +19,8 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=2048 \
     data.max_response_length=1024 \
     data.filter_overlong_prompts=False \
-    data.apply_chat_template_kwargs.enable_thinking=False \
-    actor_rollout_ref.model.path=Qwen/Qwen3-0.6B \
+    data.apply_chat_template_kwargs.enable_thinking=True \
+    actor_rollout_ref.model.path=Qwen/Qwen3-1.7B \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=1 \
@@ -52,10 +51,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
     trainer.test_freq=1 \
-    trainer.rollout_data_dir=$OUTPUT_DIR/rollout_data_dir/$EXP_NAME/$TIMESTAMP/rollout_train_data_dir \
-    trainer.validation_data_dir=$OUTPUT_DIR/rollout_data_dir/$EXP_NAME/$TIMESTAMP/rollout_val_data_dir \
-    data.log_dump_path=$OUTPUT_DIR/log/$EXP_NAME/$TIMESTAMP.jsonl \
-    data.train_files=$PROJECT_DIR/data/BFCL/multi-turn/train_1st_turn.parquet \
-    data.val_files=$PROJECT_DIR/data/BFCL/multi-turn/test_1st_turn.parquet \
+    data.log_dump_path=$PROJECT_DIR/log/$EXP_NAME/$TIMESTAMP.jsonl \
+    data.train_files=$PROJECT_DIR/data/BFCL/multi-turn/train.parquet \
+    data.val_files=$PROJECT_DIR/data/BFCL/multi-turn/test.parquet \
     actor_rollout_ref.rollout.multi_turn.tool_config_path="$PROJECT_DIR/tools/mcp_configs/bfcl_mcp_server.json" \
     trainer.total_epochs=1 $@

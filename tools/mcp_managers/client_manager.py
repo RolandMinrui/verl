@@ -95,16 +95,14 @@ class MCPClientManager:
                 # close stateful class
                 await client.close()
 
-    def dump_log(self, log_dump_path="log/log.jsonl") -> None:
-        try:
-            os.makedirs(os.path.dirname(log_dump_path), exist_ok=True)
-            
+    def dump_log(self, client_id, log_dump_path="log/log.jsonl") -> None:
+        os.makedirs(os.path.dirname(log_dump_path), exist_ok=True)
+
+        if client_id in self.log_info:
             with jsonlines.open(log_dump_path, mode='a') as writer:
-                for client_id, logs in self.log_info.items():
-                    writer.write({client_id: logs})
-            
-        except Exception as e:
-            print(f"Error dumping logs: {e}")
+                writer.write({client_id: self.log_info[client_id]})
+
+            del self.log_info[client_id] # delete log after dumping
 
     def add_log(self, client_id, info: dict) -> None:
         no_class_client_id = client_id.split("-")[-1] # remove tool class from client id
@@ -137,7 +135,7 @@ class MCPClientManager:
         }
         return new_client, False
 
-    async def close_client(self, client_id):
+    async def close_client_async(self, client_id):
         """Close and remove a client from the manager"""
         client_info = self.clients.get(client_id)
         if client_info:
@@ -149,11 +147,19 @@ class MCPClientManager:
                 del self.clients[client_id]
                 print(f"Client {client_id} closed and removed")
 
+    def close_client(self, client_id):
+        """Synchronous wrapper for the async close_client method"""
+        future = asyncio.run_coroutine_threadsafe(self.close_client_async(client_id), self.loop)
+        try:
+            future.result()
+        except Exception as e:
+            print(f"Error closing clients: {e}")
+
     def close_all_clients(self):
         """Close all stateful clients."""
         futures = []
         for client_id in list(self.clients.keys()):
-            future = asyncio.run_coroutine_threadsafe(self.close_client(client_id), self.loop)
+            future = asyncio.run_coroutine_threadsafe(self.close_client_async(client_id), self.loop)
             futures.append(future)
         
         for future in futures:
@@ -161,8 +167,6 @@ class MCPClientManager:
                 future.result()
             except Exception as e:
                 print(f"Error closing client: {e}")
-           
-        self.log_info = {}
 
     def load_scenario(self, client_id: str, scenario: dict | None = None, check: bool = False):
         """Synchronous wrapper for the async call_tool method"""
@@ -214,8 +218,10 @@ class MCPClientManager:
             return result
         except ToolError as e:
             print(f"{tool_name} fail before execution: {e}")
+            return f"{tool_name} fail before execution: {e}"
         except Exception as e:
             print(f"{tool_name} raise an unexpected error: {e}")
+            return f"{tool_name} raise an unexpected error: {e}"
 
     async def _call_tool_async(self, tool_name: str, tool_args: dict | str, client: Client, client_id: str) -> str:
         tool_name = tool_name.split("-", 1)[-1]
@@ -237,18 +243,18 @@ class MCPClientManager:
 
         return result.content[0].text
 
-    def save_all_scenario(self) -> dict:
+    def save_all_scenario(self, cliend_id_list) -> dict:
         saved_all_scenario = {}
-        for client_id, client_info in self.clients.items():
+        for client_id in cliend_id_list:
+            tool_class = client_id.split("-")[0]
             try:
-                tool_class = client_id.split("-")[0]
                 saved_scenario = self.call_tool(
                     client_id = client_id,
                     tool_name = "save_scenario",
                     tool_args = {},
                 )
                 saved_scenario = json.loads(saved_scenario)
-            except:
+            except Exception as e:
                 saved_scenario = None
             saved_all_scenario.update({tool_class: saved_scenario})
         return saved_all_scenario

@@ -63,6 +63,7 @@ class AgentData:
         self.image_data = image_data
         self.metrics = metrics
         self.request_id = request_id
+        self.client_id_list = []
         self.tools_kwargs = tools_kwargs
         self.interaction = interaction
         self.interaction_kwargs = interaction_kwargs or {}
@@ -153,6 +154,7 @@ class ToolAgentLoop(AgentLoopBase):
         tools_kwargs = kwargs.get("tools_kwargs", {})
         involved_class = kwargs.get("involved_class", None)
         initial_config = kwargs.get("initial_config", None)
+        final_config = kwargs.get("final_config", None)
 
         # Initialize interaction if needed
         interaction = None
@@ -201,13 +203,14 @@ class ToolAgentLoop(AgentLoopBase):
                 state = AgentState.TERMINATED
 
         # Save all scenarios
-        saved_all_scenario = self.client_manager.save_all_scenario()
+        saved_all_scenario = self.client_manager.save_all_scenario(agent_data.client_id_list)
 
         # Dump log
-        self.client_manager.dump_log(self.log_dump_path)
+        self.client_manager.dump_log(agent_data.request_id, self.log_dump_path)
 
-        # Close all stateful clients
-        self.client_manager.close_all_clients(ignore_stateless_client=True)
+        # Close clients
+        for client_id in agent_data.client_id_list:
+            self.client_manager.close_client(client_id)
 
         # Finalize output
         response_ids = agent_data.prompt_ids[-len(agent_data.response_mask) :]
@@ -492,6 +495,8 @@ class ToolAgentLoop(AgentLoopBase):
             tool_args = json.loads(tool_call.arguments)
             kwargs = agent_data.tools_kwargs.get(tool_name, {})
             client_id = f"{tool_class}-{agent_data.request_id}"
+            if client_id not in agent_data.client_id_list:
+                agent_data.client_id_list.append(client_id)
 
             # Load scenario
             scenario = agent_data.initial_config.get(tool_class, None)

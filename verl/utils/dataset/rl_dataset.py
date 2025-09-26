@@ -354,11 +354,15 @@ class RLHFDataset(Dataset):
         initial_config = row_dict.get("extra_info", {}).get("initial_config", None)
         if isinstance(initial_config, str):
             initial_config = json.loads(initial_config)
+        final_config = row_dict.get("extra_info", {}).get("final_config", None)
+        if isinstance(final_config, str):
+            final_config = json.loads(final_config)
         row_dict["index"] = index
         row_dict["tools_kwargs"] = tools_kwargs
         row_dict["interaction_kwargs"] = interaction_kwargs
         row_dict["involved_class"] = involved_class
         row_dict["initial_config"] = initial_config
+        row_dict["final_config"] = final_config
         return row_dict
 
     def __getstate__(self):
