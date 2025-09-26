@@ -49,6 +49,14 @@ def extract_tool_calls(text: str) -> List[str]:
     
     return tool_calls
 
+def extract_involved_classes(ground_truth_calls: List[str]) -> List[str]:
+    involved_classes = set()
+    for call in ground_truth_calls:
+        tool_name = call.split("(")[0]  
+        tool_class = tool_name.split("-")[0]  
+        involved_classes.add(tool_class)
+    return list(involved_classes)
+
 def normalize_ground_truth_calls(ground_truth_calls: List[str]) -> List[str]:
     """
     Normalize function calls in ground truth
@@ -135,17 +143,7 @@ def _compute_length_penalty(solution, ground_truth) -> float:
         length_penalty = min(0.1, (length_ratio - 1.5) * 0.2)
     return length_penalty
 
-def _compute_state_score(solution: str | dict, ground_truth: str | dict) -> float:
-    """
-    Calculate the accuracy score by comparing states after tool callings.
-    
-    Args:
-        solution: The solution state containing tool configurations with tool classes as keys and final config as values.
-        ground_truth: The ground truth state containing the expected tool configurations with tool classes as keys and final config as values.
-
-    Returns:
-        float: A score between 0.0 and 1.0 representing the accuracy.
-    """
+def _compute_state_score(solution: str | dict, ground_truth: str | dict, involved_classes: List[str] | None = None) -> float:
     def _ensure_dict(obj: str | dict) -> dict | None:
         if isinstance(obj, dict):
             return obj
@@ -154,14 +152,20 @@ def _compute_state_score(solution: str | dict, ground_truth: str | dict) -> floa
                 return json.loads(obj)
             except Exception:
                 return {}
+        return {}
 
     ground_truth = _ensure_dict(ground_truth)
     solution = _ensure_dict(solution)
+
+    if involved_classes is None:
+        involved_classes = list(ground_truth.keys())
+
+    filtered_gt = {k: v for k, v in ground_truth.items() if k in involved_classes}
     
-    matches = sum(1 for tool_class, final_config in ground_truth.items() 
-                 if solution.get(tool_class) == final_config)
-    
-    return matches / len(ground_truth) if ground_truth else 0.0
+    matches = sum(1 for tool_class, final_config in filtered_gt.items()
+                  if solution.get(tool_class) == final_config)
+
+    return matches / len(filtered_gt) if filtered_gt else 0.0
 
 def _compute_answer_score(solution: str | dict, ground_truth: str | dict) -> float:
     """
@@ -206,9 +210,13 @@ def compute_score(solution_str: str, ground_truth: str, extra_info=None) -> floa
             ground_truth=ground_truth,
         )
 
+        gt_calls = parse_ground_truth(ground_truth)
+        involved_classes = extract_involved_classes(gt_calls)
+
         state_score = _compute_state_score(
             solution=extra_info['sol_final_config'],
             ground_truth=extra_info['gts_final_config'],
+            involved_classes=involved_classes,
         )
         return {
             "score": 0.5 * trace_score + 0.5 * state_score,
