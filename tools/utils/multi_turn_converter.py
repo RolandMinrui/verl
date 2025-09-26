@@ -13,7 +13,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
+import ast
 import pandas as pd
 
 from tools.mcp_managers.client_manager import MCPClientManager
@@ -352,7 +352,7 @@ class EnhancedMultiTurnConverter:
     def create_client_manager(self) -> MCPClientManager:
         if self.manager is None:
             self.manager = MCPClientManager()
-            self.manager.initConfig(str(self.manager_config_path))
+            self.manager.init_config(str(self.manager_config_path))
         return self.manager
 
     def load_data(self, original_file: Path, golden_answer_file: Path) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -377,68 +377,80 @@ class EnhancedMultiTurnConverter:
         return value
 
     def parse_function_call(self, call_str: str) -> Tuple[str, Dict[str, Any]]:
-        if "(" in call_str and ")" in call_str:
-            func_name = call_str.split("(")[0].strip()
-            params_str = call_str[call_str.find("(") + 1 : call_str.rfind(")")]
-            params: Dict[str, Any] = {}
+        call = call_str.strip()
+        if "(" not in call or ")" not in call:
+            return call, {}
 
-            if params_str.strip():
-                if "=" in params_str:
-                    param_pattern = r"(\w+)\s*=\s*([^,]+(?:,[^=]*)*?)(?=\s*,\s*\w+\s*=|\s*$)"
-                    matches = re.findall(param_pattern, params_str)
-                    for key, value in matches:
-                        key = key.strip()
-                        value = value.strip()
-                        lowered = value.lower()
-                        if lowered == "true":
-                            parsed_value: Any = True
-                        elif lowered == "false":
-                            parsed_value = False
-                        elif value.isdigit():
-                            parsed_value = int(value)
-                        elif value.startswith("'") and value.endswith("'"):
-                            parsed_value = value[1:-1]
-                        elif value.startswith('"') and value.endswith('"'):
-                            parsed_value = value[1:-1]
-                        else:
-                            parsed_value = self.parse_list_string(value)
-                        if isinstance(parsed_value, str):
-                            list_candidate = self.parse_list_string(parsed_value)
-                            parsed_value = list_candidate
-                        params[key] = parsed_value
-                else:
-                    value = params_str.strip()
-                    if value.startswith("'") and value.endswith("'"):
-                        params_value: Any = value[1:-1]
-                    elif value.startswith('"') and value.endswith('"'):
-                        params_value = value[1:-1]
-                    else:
-                        params_value = self.parse_list_string(value)
+        name = call.split("(", 1)[0].strip()
+        args_str = call[call.find("(") + 1 : call.rfind(")")].strip()
+        if not args_str:
+            return name, {}
 
-                    if func_name in self.param_mapping:
-                        param_keys = list(self.param_mapping[func_name].keys())
-                        if param_keys:
-                            params[param_keys[0]] = params_value
+        # 用 AST 解析以正确处理转义序列、数字、布尔、列表/字典等
+        try:
+            expr = ast.parse(f"f({args_str})", mode="eval").body  # type: ignore[attr-defined]
+        except SyntaxError as exc:
+            raise ValueError(f"Failed to parse arguments for call '{call}': {exc}") from exc
 
-            return func_name, params
-        return call_str, {}
+        params: Dict[str, Any] = {}
+        for kw in expr.keywords:
+            params[kw.arg] = ast.literal_eval(kw.value)
+
+        # 如有位置参数，统一不支持（和验证脚本一致）；需要的话可放入 __args__
+        if expr.args:
+            params["__args__"] = [ast.literal_eval(a) for a in expr.args]
+
+        return name, params
 
     def convert_function_call(self, old_call: str) -> Tuple[str, Dict[str, Any]]:
+        # 先解析出原始函数名和参数（可能包含 __args__）
         func_name, params = self.parse_function_call(old_call)
+
+        # 计算新的函数名（带前缀）
         new_func_name = self.function_mapping.get(func_name, func_name)
         if new_func_name == func_name and "-" not in new_func_name:
             inferred = self.infer_tool_name(func_name)
             if inferred:
                 new_func_name = inferred
 
+        # —— 关键修复：对位置参数做“位置→命名”的映射 ——
+        # param_mapping 用的是“基础名”（不含前缀），比如 "sort"、"grep"
+        def _pick_param_map() -> Dict[str, str]:
+            # 依次尝试：原始名去前缀、新名去前缀、原始名（兼容极少数键）
+            base_candidates = [
+                func_name.split("-", 1)[-1],
+                new_func_name.split("-", 1)[-1],
+                func_name,
+            ]
+            for cand in base_candidates:
+                if cand in self.param_mapping:
+                    return self.param_mapping[cand]
+            return {}
+
+        param_map = _pick_param_map()
+
         new_params: Dict[str, Any] = {}
-        if func_name in self.param_mapping:
-            param_map = self.param_mapping[func_name]
+
+        # 1) 先把位置参数（__args__）按 param_map 的参数顺序依次填充
+        if "__args__" in params:
+            args = params.pop("__args__") or []
+            if param_map:
+                ordered_keys = list(param_map.keys())
+                for i, arg in enumerate(args):
+                    if i < len(ordered_keys) and ordered_keys[i] not in new_params:
+                        new_params[ordered_keys[i]] = arg
+            else:
+                # 没有映射表就原样保留，避免信息丢失
+                if args:
+                    new_params["__args__"] = args
+
+        # 2) 再处理命名参数：根据 param_map 做键名映射
+        if param_map:
             for key, value in params.items():
                 mapped_key = param_map.get(key, key)
                 new_params[mapped_key] = value
         else:
-            new_params = params
+            new_params.update(params)
 
         return new_func_name, new_params
 
@@ -535,7 +547,6 @@ class EnhancedMultiTurnConverter:
         saved: Dict[str, Any] = {}
         for class_name, client_id in self.client_ids.items():
             if class_name == "math":
-                saved[class_name] = {"status": "ready"}
                 continue
 
             try:
@@ -857,7 +868,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=Path("tools/mcp_configs/bfcl_mcp_server.json"))
     parser.add_argument("--original-file", type=Path, default=Path("data/BFCL/multi-turn-original/BFCL_v3_multi_turn_base.json"))
     parser.add_argument("--golden-file", type=Path, default=Path("data/BFCL/possible_answer/BFCL_v3_multi_turn_base.json"))
-    parser.add_argument("--output-dir", type=Path, default=Path("data/BFCL/multi-turn"))
+    parser.add_argument("--output-dir", type=Path, default=Path("data/BFCL/multi-turn-test"))
     parser.add_argument("--num-items", type=int, default=200)
     parser.add_argument("--test-nums", type=int, default=30)
     return parser.parse_args()

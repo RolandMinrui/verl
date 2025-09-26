@@ -55,35 +55,7 @@ def load_scenario(scenario: dict, long_context: bool = False):
 def save_scenario():
     """Save a scenario. """
     try:
-        if not hasattr(file_system, "root") or file_system.root is None:
-            return None
-
-        def serialize_directory(directory):
-            contents = {}
-            for name, item in directory.contents.items():
-                # Directory
-                if isinstance(item, Directory):
-                    contents[name] = {
-                        "type": "directory",
-                        "contents": serialize_directory(item),
-                    }
-                # File
-                elif isinstance(item, File):
-                    contents[name] = {
-                        "type": "file",
-                        "content": item.content,
-                    }
-            return contents
-
-        root_dir = file_system.root
-        scenario = {
-            "root": {
-                root_dir.name: {
-                    "type": "directory",
-                    "contents": serialize_directory(root_dir),
-                }
-            }
-        }
+        scenario = file_system._save_scenario()
         return scenario
     except Exception as e:
         return f"Error: {str(e)}"

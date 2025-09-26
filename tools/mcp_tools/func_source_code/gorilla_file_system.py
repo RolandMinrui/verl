@@ -200,6 +200,46 @@ class GorillaFileSystem:
                 scenario["root"][list(scenario["root"].keys())[0]]["contents"], root_dir
             )
         self._current_dir = self.root
+        # if current_dir is in scenario, try to restore
+        if "current_dir" in scenario:
+            restored = self._navigate_to_directory(scenario["current_dir"])
+            if isinstance(restored, Directory):
+                self._current_dir = restored
+
+
+    def _save_scenario(self):
+        """Save a scenario. """
+        if not hasattr(self, "root") or self.root is None:
+            return None
+
+        def serialize_directory(directory):
+            contents = {}
+            for name, item in directory.contents.items():
+                # Directory
+                if isinstance(item, Directory):
+                    contents[name] = {
+                        "type": "directory",
+                        "contents": serialize_directory(item),
+                    }
+                # File
+                elif isinstance(item, File):
+                    contents[name] = {
+                        "type": "file",
+                        "content": item.content,
+                    }
+            return contents
+
+        root_dir = self.root
+        scenario = {
+            "root": {
+                root_dir.name: {
+                    "type": "directory",
+                    "contents": serialize_directory(root_dir),
+                }
+            },
+            "current_dir": self.pwd()["current_working_directory"]
+        }
+        return scenario
 
     def _load_directory(
         self, current: dict, parent: Optional[Directory] = None
@@ -761,6 +801,7 @@ class GorillaFileSystem:
                 self._current_dir.contents[destination].contents = item.contents.copy()
             return {"result": f"'{source}' copied to '{destination}'"}
 
+
     def _navigate_to_directory(
         self, path: Optional[str]
     ) -> Union[Directory, Dict[str, str]]:
@@ -780,6 +821,10 @@ class GorillaFileSystem:
 
         dirs = path.strip("/").split("/")
         temp_dir = self._current_dir if not path.startswith("/") else self.root
+        
+        # if the first directory is the root, remove it
+        if dirs and dirs[0] == self.root.name:
+            dirs = dirs[1:]
 
         for dir_name in dirs:
             next_dir = temp_dir._get_item(dir_name)

@@ -79,9 +79,6 @@ class MessageAPI:
         DEFAULT_STATE_COPY = deepcopy(DEFAULT_STATE)
         self.random_seed = scenario.get("random_seed", 200191)
         self._random = random.Random((self.random_seed))
-        self.generated_ids = scenario.get(
-            "generated_ids", DEFAULT_STATE_COPY["generated_ids"]
-        )
         self.user_count = scenario.get("user_count", DEFAULT_STATE_COPY["user_count"])
         self.user_map = scenario.get("user_map", DEFAULT_STATE_COPY["user_map"])
         self.inbox = scenario.get("inbox", DEFAULT_STATE_COPY["inbox"])
@@ -89,6 +86,8 @@ class MessageAPI:
             "message_count", DEFAULT_STATE_COPY["message_count"]
         )
         self.current_user = scenario.get("current_user", DEFAULT_STATE_COPY["current_user"])
+        gen = scenario.get("generated_ids", DEFAULT_STATE_COPY["generated_ids"])
+        self.generated_ids = set(gen) if isinstance(gen, list) else gen
 
     def save_scenario(self) -> dict:
         scenario = {
