@@ -1,6 +1,6 @@
 from typing import Dict, List, Union
 from mcp.server.fastmcp import FastMCP
-from tools.mcp_tools.func_source_code.trading_bot import TradingBot
+from .func_source_code.trading_bot import TradingBot
 
 mcp = FastMCP("Trading")
 

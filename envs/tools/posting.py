@@ -1,6 +1,6 @@
 from typing import List, Dict, Union
 from mcp.server.fastmcp import FastMCP
-from tools.mcp_tools.func_source_code.posting_api import TwitterAPI
+from .func_source_code.posting_api import TwitterAPI
 
 mcp = FastMCP("Posting")
 

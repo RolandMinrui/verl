@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP
-from tools.mcp_tools.func_source_code.message_api import MessageAPI
+from .func_source_code.message_api import MessageAPI
 
 mcp = FastMCP("Message")
 

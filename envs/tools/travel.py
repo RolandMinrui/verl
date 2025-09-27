@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP
-from tools.mcp_tools.func_source_code.travel_booking import TravelAPI
+from .func_source_code.travel_booking import TravelAPI
 
 mcp = FastMCP("Travel")
 

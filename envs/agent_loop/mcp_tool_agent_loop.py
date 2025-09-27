@@ -16,77 +16,49 @@ import copy
 import json
 import logging
 import os
-from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 from uuid import uuid4
 
+from envs.manager.mcp_client_manager import MCPClientManager
+from envs.utils.bfcl_mcp_tools import TOOL_SYSTEM_PROMPT, TOOLS_TO_IGNORE
+
 from verl.experimental.agent_loop.agent_loop import AgentLoopBase, AgentLoopOutput, register
+from verl.experimental.agent_loop.tool_agent_loop import AgentData, AgentState, ToolAgentLoop
 from verl.experimental.agent_loop.tool_parser import FunctionCall, ToolParser
 from verl.interactions.base import BaseInteraction
 from verl.interactions.utils.interaction_registry import initialize_interactions_from_config
 from verl.tools.schemas import ToolResponse
+from verl.tools.utils.tool_registry import initialize_tools_from_config
 from verl.utils.profiler import simple_timer
 from verl.utils.rollout_trace import rollout_trace_op
-from envs.utils.bfcl_mcp_tools import TOOL_SYSTEM_PROMPT, TOOLS_TO_IGNORE
-from tools.mcp_managers.client_manager import MCPClientManager
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
 
-class AgentState(Enum):
-    PENDING = "pending"
-    GENERATING = "generating"
-    PROCESSING_TOOLS = "processing_tools"
-    TERMINATED = "terminated"
-    INTERACTING = "interacting"
 
-
-class AgentData:
-    """Encapsulates all state variables for the agent loop."""
-
+class MCPToolAgentData(AgentData):
     def __init__(
         self,
-        messages: list[dict[str, Any]],
-        image_data: Any,
-        metrics: dict[str, Any],
-        request_id: str,
-        tools_kwargs: dict[str, Any],
-        interaction: Optional[BaseInteraction] = None,
-        interaction_kwargs: Optional[dict[str, Any]] = None,
+        *args,
         involved_class: Optional[str] = None,
         initial_config: Optional[dict[str, Any]] = None,
+        **kwargs
     ):
-        self.messages = [{"content": TOOL_SYSTEM_PROMPT, "role": "system"}]
-        self.messages.extend(messages)
-        self.image_data = image_data
-        self.metrics = metrics
-        self.request_id = request_id
+        super().__init__(*args, **kwargs)
+        
+        # Additional parameters for MCP Tool
         self.client_id_list = []
-        self.tools_kwargs = tools_kwargs
-        self.interaction = interaction
-        self.interaction_kwargs = interaction_kwargs or {}
-
-        # State variables
-        self.prompt_ids: list[int] = []
-        self.response_ids: list[int] = []
-        self.response_mask: list[int] = []
-        self.response_logprobs: list[float] = []
-        self.turn_scores: list[float] = []
-        self.user_turns = 0
-        self.assistant_turns = 0
-
-        # Temporary state for tool calls
-        self.tool_calls: list[FunctionCall] = []
-
-        # Extra information such as involved_class, initial_config, etc.
         self.involved_class = involved_class
-        self.initial_config = initial_config
+        self.initial_config = initial_config or {}
+
+        self.messages = [{"content": TOOL_SYSTEM_PROMPT, "role": "system"}] + self.messages
 
 
-@register("tool_agent")
-class ToolAgentLoop(AgentLoopBase):
+
+@register("mcp_tool_agent")
+class MCPToolAgentLoop(ToolAgentLoop):
     @classmethod
     def init_class(cls, config, tokenizer, processor, **kwargs):
         if cls._class_initialized:
@@ -97,10 +69,9 @@ class ToolAgentLoop(AgentLoopBase):
         # Initialize tools from config file
         cls.tokenizer = tokenizer
         cls.processor = processor
-        cls.max_prompt_length = config.data.max_prompt_length
         cls.max_user_turns = config.actor_rollout_ref.rollout.multi_turn.max_user_turns
         cls.max_assistant_turns = config.actor_rollout_ref.rollout.multi_turn.max_assistant_turns
-        cls.max_parallel_calls = config.actor_rollout_ref.rollout.multi_turn.max_parallel_calls # FIXME: Current design only consider max_parallel_calls=1.
+        cls.max_parallel_calls = config.actor_rollout_ref.rollout.multi_turn.max_parallel_calls
         cls.max_tool_response_length = config.actor_rollout_ref.rollout.multi_turn.max_tool_response_length
         cls.tool_response_truncate_side = config.actor_rollout_ref.rollout.multi_turn.tool_response_truncate_side
         cls.log_dump_path = config.data.log_dump_path
@@ -144,7 +115,6 @@ class ToolAgentLoop(AgentLoopBase):
         
         return filtered_tool_schemas
 
-
     @rollout_trace_op
     async def run(self, sampling_params: dict[str, Any], **kwargs) -> AgentLoopOutput:
         messages = list(kwargs["raw_prompt"])
@@ -154,7 +124,6 @@ class ToolAgentLoop(AgentLoopBase):
         tools_kwargs = kwargs.get("tools_kwargs", {})
         involved_class = kwargs.get("involved_class", None)
         initial_config = kwargs.get("initial_config", None)
-        final_config = kwargs.get("final_config", None)
 
         # Initialize interaction if needed
         interaction = None
@@ -171,7 +140,6 @@ class ToolAgentLoop(AgentLoopBase):
                 )
             interaction = self.interaction_map[interaction_name]
             await interaction.start_interaction(request_id, **interaction_kwargs)
-
         # Create AgentData instance to encapsulate all state
         agent_data = AgentData(
             messages=messages,
@@ -192,12 +160,10 @@ class ToolAgentLoop(AgentLoopBase):
                 state = await self._handle_pending_state(agent_data, sampling_params)
             elif state == AgentState.GENERATING:
                 state = await self._handle_generating_state(agent_data, sampling_params)
-                agent_data.assistant_turns += 1
             elif state == AgentState.PROCESSING_TOOLS:
                 state = await self._handle_processing_tools_state(agent_data)
             elif state == AgentState.INTERACTING:
                 state = await self._handle_interacting_state(agent_data)
-                agent_data.user_turns += 1
             else:
                 logger.error(f"Invalid state: {state}")
                 state = AgentState.TERMINATED
@@ -243,8 +209,6 @@ class ToolAgentLoop(AgentLoopBase):
                     tools=self.filter_tools(agent_data.involved_class),
                     add_generation_prompt=True,
                     tokenize=False,
-                    truncation=True,
-                    max_length=self.max_prompt_length,
                     **self.apply_chat_template_kwargs,
                 ),
             )
@@ -258,14 +222,14 @@ class ToolAgentLoop(AgentLoopBase):
                     tools=self.filter_tools(agent_data.involved_class),
                     add_generation_prompt=True,
                     tokenize=True,
-                    truncation=True,
-                    max_length=self.max_prompt_length,
                     **self.apply_chat_template_kwargs,
                 ),
             )
         return AgentState.GENERATING
 
-    async def _handle_generating_state(self, agent_data: AgentData, sampling_params: dict[str, Any]) -> AgentState:
+    async def _handle_generating_state(
+        self, agent_data: AgentData, sampling_params: dict[str, Any], ignore_termination: bool = False
+    ) -> AgentState:
         """Handle the generating state: generate model response and check for tool calls."""
         add_messages: list[dict[str, Any]] = []
 
@@ -287,6 +251,7 @@ class ToolAgentLoop(AgentLoopBase):
             }
         )
 
+        agent_data.assistant_turns += 1
         agent_data.response_ids = output.token_ids
         agent_data.prompt_ids += agent_data.response_ids
         agent_data.response_mask += [1] * len(agent_data.response_ids)
@@ -294,7 +259,7 @@ class ToolAgentLoop(AgentLoopBase):
             agent_data.response_logprobs += output.log_probs
 
         # Check termination conditions
-        if len(agent_data.response_mask) >= self.response_length:
+        if not ignore_termination and len(agent_data.response_mask) >= self.response_length:
             return AgentState.TERMINATED
         if self.max_assistant_turns and agent_data.assistant_turns >= self.max_assistant_turns:
             return AgentState.TERMINATED
@@ -307,7 +272,7 @@ class ToolAgentLoop(AgentLoopBase):
         # Handle interaction if needed
         if self.interaction_config_file:
             assistant_message = await self.loop.run_in_executor(
-                None, lambda: self.tokenizer.decode(agent_data.response_ids)
+                None, lambda: self.tokenizer.decode(agent_data.response_ids, skip_special_tokens=True)
             )
             add_messages.append({"role": "assistant", "content": assistant_message})
             agent_data.messages.extend(add_messages)
@@ -325,7 +290,6 @@ class ToolAgentLoop(AgentLoopBase):
         add_messages: list[dict[str, Any]] = []
         new_images_this_turn: list[Any] = []  # Local variable instead of agent_data attribute
 
-        # TODO: batch tool calling is not supported yet.
         responses = []
         for i in range(0, len(agent_data.tool_calls), self.max_parallel_calls):
             batch_tool_calls = agent_data.tool_calls[i:i+self.max_parallel_calls]
@@ -337,15 +301,9 @@ class ToolAgentLoop(AgentLoopBase):
                 batch_responses = await asyncio.gather(*tasks, return_exceptions=True)
                 responses.extend(batch_responses)
 
-        # Handle responses for interaction if needed
-        if self.interaction_config_file:
-            for response in responses:
-                if response.text:
-                    agent_data.messages.append({"role": "tool", "content": response.text})
-
         # Process tool responses and update multi_modal_data
         # Removed: agent_data.new_images_this_turn = []
-        for tool_response in responses:
+        for tool_response, tool_reward, _ in responses:
             # Create message from tool response
             if tool_response.image or tool_response.video:
                 # Multi-modal content with structured format
@@ -368,6 +326,7 @@ class ToolAgentLoop(AgentLoopBase):
                 message = {"role": "tool", "content": tool_response.text or ""}
 
             add_messages.append(message)
+            agent_data.messages.extend(add_messages)
 
             # Handle image data
             if tool_response.image:
@@ -397,6 +356,9 @@ class ToolAgentLoop(AgentLoopBase):
                     "Multimedia type 'video' is not currently supported. Only 'image' is supported."
                 )
 
+            if tool_reward is not None:
+                agent_data.tool_rewards.append(tool_reward)
+
         # Update prompt with tool responses
         if self.processor is not None:
             raw_tool_response = await self.loop.run_in_executor(
@@ -415,17 +377,11 @@ class ToolAgentLoop(AgentLoopBase):
         else:
             response_ids = await self.loop.run_in_executor(
                 None,
-                lambda: self.tokenizer.apply_chat_template(
-                    add_messages,
-                    add_generation_prompt=True,
-                    tokenize=True,
-                    **self.apply_chat_template_kwargs
-                ),
+                lambda: self.tokenizer.apply_chat_template(add_messages, add_generation_prompt=True, tokenize=True),
             )
         response_ids = response_ids[len(self.system_prompt) :]
         if len(agent_data.response_mask) + len(response_ids) >= self.response_length:
             return AgentState.TERMINATED
-        
         # Update prompt_ids and response_mask
         agent_data.prompt_ids += response_ids
         agent_data.response_mask += [0] * len(response_ids)
@@ -444,8 +400,10 @@ class ToolAgentLoop(AgentLoopBase):
         ) = await agent_data.interaction.generate_response(
             agent_data.request_id, agent_data.messages, **agent_data.interaction_kwargs
         )
+        agent_data.user_turns += 1
 
         add_messages: list[dict[str, Any]] = [{"role": "user", "content": interaction_responses}]
+        agent_data.messages.extend(add_messages)
 
         if reward is not None:
             agent_data.turn_scores.append(reward)
@@ -466,12 +424,7 @@ class ToolAgentLoop(AgentLoopBase):
         else:
             response_ids = await self.loop.run_in_executor(
                 None,
-                lambda: self.tokenizer.apply_chat_template(
-                    add_messages,
-                    add_generation_prompt=True,
-                    tokenize=True,
-                    **self.apply_chat_template_kwargs,
-                ),
+                lambda: self.tokenizer.apply_chat_template(add_messages, add_generation_prompt=True, tokenize=True),
             )
         response_ids = response_ids[len(self.system_prompt) :]
 
@@ -481,45 +434,40 @@ class ToolAgentLoop(AgentLoopBase):
         if agent_data.response_logprobs:
             agent_data.response_logprobs += [0.0] * len(response_ids)
 
+        # double check prompt
         # Check termination condition
         if should_terminate_sequence:
             return AgentState.TERMINATED
         else:
             return AgentState.GENERATING
 
-    async def _call_tool(self, agent_data: AgentData, tool_call: FunctionCall) -> ToolResponse:
+    async def _call_tool(
+        self, tool_call: FunctionCall, tools_kwargs: dict[str, Any]
+    ) -> tuple[ToolResponse, float, dict]:
         """Call tool and return tool response."""
+        tool, instance_id = None, None
         try:
+            # TODO: append malformed tool_call to the prompt: invalid function name or arguments
             tool_name = tool_call.name
-            tool_class = tool_name.split("-")[0]
             tool_args = json.loads(tool_call.arguments)
-            kwargs = agent_data.tools_kwargs.get(tool_name, {})
-            client_id = f"{tool_class}-{agent_data.request_id}"
-            if client_id not in agent_data.client_id_list:
-                agent_data.client_id_list.append(client_id)
-
-            # Load scenario
-            scenario = agent_data.initial_config.get(tool_class, None)
-            tool_execution_response = self.client_manager.load_scenario(
-                scenario = scenario,
-                client_id = client_id,
-                check = False,
-            )
-
-            # Call tool
-            tool_execution_response = self.client_manager.call_tool(
-                tool_name = tool_name,
-                tool_args = tool_args,
-                client_id = client_id,
-            )
-
+            tool = self.tools[tool_name]
+            kwargs = tools_kwargs.get(tool_name, {})
+            instance_id, _ = await tool.create(create_kwargs=kwargs.get("create_kwargs", {}))
+            tool_execution_response, tool_reward, res = await tool.execute(instance_id, tool_args)
         except Exception as e:
             logger.warning(f"Error when executing tool: {e}")
-            return ToolResponse(
-                text=f"Error when executing tool: {e}",
+            return (
+                ToolResponse(
+                    text=f"Error when executing tool: {e}",
+                ),
+                0.0,
+                {},
             )
-        
-        tool_response_text = tool_execution_response
+        finally:
+            if tool and instance_id:
+                await tool.release(instance_id)
+
+        tool_response_text = tool_execution_response.text
         if tool_response_text and len(tool_response_text) > self.max_tool_response_length:
             if self.tool_response_truncate_side == "left":
                 tool_response_text = tool_response_text[: self.max_tool_response_length] + "...(truncated)"
@@ -539,7 +487,7 @@ class ToolAgentLoop(AgentLoopBase):
                 if attr_value is not None:
                     tool_response_kwargs[attr_name] = attr_value
 
-        return ToolResponse(**tool_response_kwargs)
+        return ToolResponse(**tool_response_kwargs), tool_reward, res
 
     @classmethod
     def _initialize_interactions(cls, interaction_config_file):

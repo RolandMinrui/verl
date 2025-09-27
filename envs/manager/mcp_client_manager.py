@@ -1,11 +1,11 @@
 # This class use the Qwen MCPManager as a reference.
 import asyncio
-import json
-import threading
-import os
-import jsonlines
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
+import json
+import jsonlines
+import os
+import threading
 
 
 class MCPClientManager:
@@ -17,9 +17,9 @@ class MCPClientManager:
         return cls._instance
 
     def __init__(self):
-        if not hasattr(self, 'clients'):  # The singleton should only be inited once
+        if not hasattr(self, 'clients'):  # The singleton should only be initialized once
             self.clients = {} # client_id to stateful clients
-            self.stateless_clients = {} # tool class to stateless clients
+            self.stateless_clients = {} # class to stateless clients
             self.class_to_path_mapping = {}
             self.log_info = {}
             
