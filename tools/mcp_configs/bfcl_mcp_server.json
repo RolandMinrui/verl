@@ -31,6 +31,22 @@
         "message": {
             "local_path": "tools/mcp_tools/message.py",
             "stateless": false
+        },
+        "airline": {
+            "local_path": "tools/mcp_tools/airline.py",
+            "stateless": false
+        },
+        "mock": {
+            "local_path": "tools/mcp_tools/mock.py",
+            "stateless": false
+        },
+        "retail": {
+            "local_path": "tools/mcp_tools/retail.py",
+            "stateless": false
+        },
+        "telecom": {
+            "local_path": "tools/mcp_tools/telecom.py",
+            "stateless": false
         }
     }
 }
