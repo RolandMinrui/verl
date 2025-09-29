@@ -157,7 +157,7 @@ class TradingBot:
         self.random_seed: int
         self._api_description = "This tool belongs to the trading system, which allows users to trade stocks, manage their account, and view stock information."
 
-    def load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> str:
         """
         Load a scenario into the TradingBot.
 
@@ -189,8 +189,9 @@ class TradingBot:
         self.long_context = long_context
         self.random_seed = scenario.get("random_seed", DEFAULT_STATE_COPY["random_seed"])
         self._random = random.Random(self.random_seed)
+        return "Successfully loaded scenario"
 
-    def save_scenario(self) -> Dict[str, Union[Dict, str]]:
+    def save_scenario(self) -> dict:
         """
         Save the current TradingBot state to a dictionary.
         
@@ -209,7 +210,7 @@ class TradingBot:
                 "transaction_history": self.transaction_history,
                 "random_seed": self.random_seed 
             }
-            return {"scenario": scenario, "message": "Scenario saved successfully."}
+            return scenario
         except Exception as e:
             return {"error": f"Failed to save scenario: {str(e)}"}
 

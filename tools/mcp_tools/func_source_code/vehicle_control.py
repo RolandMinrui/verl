@@ -79,7 +79,7 @@ class VehicleControlAPI:
         self._api_description = "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more."
         self.random_seed: int
 
-    def load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> str:
         """
         Loads the scenario for the vehicle control.
         Args:
@@ -154,10 +154,12 @@ class VehicleControlAPI:
         self.rearRightTirePressure = scenario.get(
             "rearRightTirePressure", DEFAULT_STATE_COPY["rearRightTirePressure"]
         )
-
         self.long_context = long_context
+        
+        return "Successfully loaded scenario"
 
-    def save_scenario(self) -> Dict[str, Union[str, float, Dict]]:
+
+    def save_scenario(self) -> dict:
         """
         Exports the current scenario state of the vehicle.
         Returns:

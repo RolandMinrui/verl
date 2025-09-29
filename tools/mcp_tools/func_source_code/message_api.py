@@ -69,7 +69,7 @@ class MessageAPI:
 
 
 
-    def load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> str:
         """
         Load a scenario into the MessageAPI.
 
@@ -88,6 +88,7 @@ class MessageAPI:
         self.current_user = scenario.get("current_user", DEFAULT_STATE_COPY["current_user"])
         gen = scenario.get("generated_ids", DEFAULT_STATE_COPY["generated_ids"])
         self.generated_ids = set(gen) if isinstance(gen, list) else gen
+        return "Successfully loaded scenario"
 
     def save_scenario(self) -> dict:
         scenario = {

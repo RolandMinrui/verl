@@ -25,7 +25,7 @@ class TwitterAPI:
         self.tweet_counter: int
         self._api_description = "This tool belongs to the TwitterAPI, which provides core functionality for posting tweets, retweeting, commenting, and following users on Twitter."
 
-    def load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> str:
         """
         Load a scenario into the TwitterAPI instance.
         Args:
@@ -47,8 +47,9 @@ class TwitterAPI:
         self.tweet_counter = scenario.get(
             "tweet_counter", DEFAULT_STATE_COPY["tweet_counter"]
         )
+        return "Successfully loaded scenario"
 
-    def save_scenario(self) -> Dict[str, Union[dict, str]]:
+    def save_scenario(self) -> dict:
         """
         Save the current TwitterAPI state to a dictionary.
 
@@ -66,7 +67,7 @@ class TwitterAPI:
                 "following_list": self.following_list,
                 "tweet_counter": self.tweet_counter,
             }
-            return {"scenario": scenario, "message": "Scenario saved successfully."}
+            return scenario
         except Exception as e:
             return {"error": f"Failed to save scenario: {str(e)}"}
 

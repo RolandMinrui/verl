@@ -151,7 +151,7 @@ class GorillaFileSystem:
             return False
         return self.root == other.root
 
-    def load_scenario(self, scenario: dict, long_context: bool = False) -> None:
+    def load_scenario(self, scenario: dict, long_context: bool = False) -> str:
         """
         Load a scenario into the file system.
 
@@ -206,8 +206,10 @@ class GorillaFileSystem:
             if isinstance(restored, Directory):
                 self._current_dir = restored
 
+        return "Successfully loaded scenario"
 
-    def _save_scenario(self):
+
+    def save_scenario(self):
         """Save a scenario. """
         if not hasattr(self, "root") or self.root is None:
             return None
