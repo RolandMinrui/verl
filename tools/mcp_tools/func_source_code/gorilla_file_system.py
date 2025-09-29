@@ -151,7 +151,7 @@ class GorillaFileSystem:
             return False
         return self.root == other.root
 
-    def _load_scenario(self, scenario: dict, long_context: bool = False) -> None:
+    def load_scenario(self, scenario: dict, long_context: bool = False) -> None:
         """
         Load a scenario into the file system.
 

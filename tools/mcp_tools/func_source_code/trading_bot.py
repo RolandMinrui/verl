@@ -157,7 +157,7 @@ class TradingBot:
         self.random_seed: int
         self._api_description = "This tool belongs to the trading system, which allows users to trade stocks, manage their account, and view stock information."
 
-    def _load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> None:
         """
         Load a scenario into the TradingBot.
 

@@ -37,7 +37,7 @@ class TravelAPI:
         self._flight_cost_lookup: Dict[str, Dict[str, float]] = {}
         self.random_seed: int
 
-    def _load_scenario(
+    def load_scenario(
         self,
         scenario: Dict[str, Union[Dict, str, int, float]],
         long_context: bool = False,

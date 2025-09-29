@@ -79,7 +79,7 @@ class VehicleControlAPI:
         self._api_description = "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more."
         self.random_seed: int
 
-    def _load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> None:
         """
         Loads the scenario for the vehicle control.
         Args:

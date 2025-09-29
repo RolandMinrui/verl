@@ -69,7 +69,7 @@ class MessageAPI:
 
 
 
-    def _load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> None:
         """
         Load a scenario into the MessageAPI.
 

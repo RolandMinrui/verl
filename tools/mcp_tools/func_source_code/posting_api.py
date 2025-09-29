@@ -25,7 +25,7 @@ class TwitterAPI:
         self.tweet_counter: int
         self._api_description = "This tool belongs to the TwitterAPI, which provides core functionality for posting tweets, retweeting, commenting, and following users on Twitter."
 
-    def _load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> None:
         """
         Load a scenario into the TwitterAPI instance.
         Args:
