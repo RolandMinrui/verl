@@ -3,8 +3,6 @@
 from copy import deepcopy
 from typing import List, Optional
 
-from loguru import logger
-
 from .data_model import (
     AirportCode,
     AirportInfo,
@@ -350,7 +348,6 @@ class AirlineTools(ToolKitBase):  # Tools
             ValueError: If the reservation is not found.
         """
         reservation = self._get_reservation(reservation_id)
-        logger.debug(reservation.model_dump_json(indent=4))
         # reverse the payment
         refunds = []
         for payment in reservation.payment_history:
@@ -362,9 +359,6 @@ class AirlineTools(ToolKitBase):  # Tools
             )
         reservation.payment_history.extend(refunds)
         reservation.status = "cancelled"
-        logger.debug(self._get_reservation(reservation_id).model_dump_json(indent=4))
-        # Release seats
-        logger.warning("Seats release not implemented for cancellation!!!")
         return reservation
 
     @is_tool(ToolType.READ)
@@ -710,8 +704,6 @@ class AirlineTools(ToolKitBase):  # Tools
         if all(isinstance(passenger, dict) for passenger in passengers):
             passengers = [Passenger(**passenger) for passenger in passengers]
         reservation = self._get_reservation(reservation_id)
-        logger.info(len(passengers))
-        logger.info(len(reservation.passengers))
         if len(passengers) != len(reservation.passengers):
             raise ValueError("Number of passengers does not match")
         reservation.passengers = deepcopy(passengers)

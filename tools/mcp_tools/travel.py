@@ -6,5 +6,4 @@ mcp = FastMCP("Travel")
 register_mcp_tools(TravelAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Travel Booking Server...")
     mcp.run(transport='stdio')

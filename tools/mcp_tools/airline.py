@@ -11,5 +11,4 @@ mcp = FastMCP("Airline")
 register_mcp_tools(AirlineTools, mcp, airline)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Airline Booking Server...")
     mcp.run(transport='stdio')

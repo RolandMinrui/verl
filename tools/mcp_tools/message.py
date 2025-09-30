@@ -6,5 +6,4 @@ mcp = FastMCP("Message")
 register_mcp_tools(MessageAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Message Management Server...")
     mcp.run(transport='stdio')

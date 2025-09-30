@@ -5,8 +5,6 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 
-from loguru import logger
-
 from .data_model import (
     Bill,
     BillStatus,
@@ -286,9 +284,6 @@ class TelecomTools(ToolKitBase):
         target_line.status = LineStatus.SUSPENDED
         target_line.suspension_start_date = get_today()
 
-        # Log reason
-        logger.info(f"Line {line_id} suspended. Reason: {reason}")
-
         return {
             "message": "Line suspended successfully. $5/month holding fee will apply.",
             "line": target_line,
@@ -321,9 +316,6 @@ class TelecomTools(ToolKitBase):
 
         target_line.status = LineStatus.ACTIVE
         target_line.suspension_start_date = None
-
-        # Log action
-        logger.info(f"Line {line_id} resumed")
 
         return {
             "message": "Line resumed successfully",
@@ -558,8 +550,6 @@ class TelecomTools(ToolKitBase):
 
         target_line.roaming_enabled = True
 
-        logger.info(f"Roaming enabled for line {line_id}")
-
         return "Roaming enabled successfully"
 
     @is_tool(ToolType.WRITE)
@@ -583,8 +573,6 @@ class TelecomTools(ToolKitBase):
             return "Roaming was already disabled"
 
         target_line.roaming_enabled = False
-
-        logger.info(f"Roaming disabled for line {line_id}")
 
         return "Roaming disabled successfully"
 
@@ -644,10 +632,6 @@ class TelecomTools(ToolKitBase):
             customer_id,
             charge_amount,
             f"Data refueling: {gb_amount} GB at ${plan.data_refueling_price_per_gb}/GB",
-        )
-
-        logger.info(
-            f"Data refueled for line {line_id}: {gb_amount} GB added, charge: ${charge_amount:.2f}"
         )
 
         return {

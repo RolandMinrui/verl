@@ -6,5 +6,4 @@ mcp = FastMCP("Math")
 register_mcp_tools(MathAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Math Server...")
     mcp.run(transport='stdio')

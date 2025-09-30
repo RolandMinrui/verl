@@ -6,5 +6,4 @@ mcp = FastMCP("Posting")
 register_mcp_tools(TwitterAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Twitter Posting Server...")
     mcp.run(transport='stdio')

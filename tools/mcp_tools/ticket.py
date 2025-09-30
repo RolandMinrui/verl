@@ -6,5 +6,4 @@ mcp = FastMCP("Ticket")
 register_mcp_tools(TicketAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Ticket Management Server...")
     mcp.run(transport='stdio')

@@ -6,5 +6,4 @@ mcp = FastMCP("Vehicle")
 register_mcp_tools(VehicleControlAPI, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Vehicle Control Server...")
     mcp.run(transport='stdio')

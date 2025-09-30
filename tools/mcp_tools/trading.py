@@ -6,5 +6,4 @@ mcp = FastMCP("TradingBot")
 register_mcp_tools(TradingBot, mcp)
 
 if __name__ == "__main__":
-    print("\nStarting MCP Trading Server...")
     mcp.run(transport='stdio')
