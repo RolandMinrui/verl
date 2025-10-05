@@ -11,5 +11,19 @@ USE_MEGATRON=0 bash scripts/install_vllm_sglang_mcore.sh # Or if you simply need
 
 pip install --no-deps -e .
 
-pip install fastmcp jsonlines
+pip install fastmcp jsonlines toml
+
+pip install arxiv ddgs semanticscholar wikipedia-api # For search envs
+```
+
+### Environment Structure
+```
+envs/
+├── agent_loop/
+├── configs/
+├── database/
+├── manager/
+├── reward/
+├── tools/
+└── utils/
 ```

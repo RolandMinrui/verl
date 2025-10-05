@@ -1,7 +1,6 @@
 import arxiv
 from ddgs import DDGS
 import json
-import requests
 from semanticscholar import SemanticScholar
 import wikipediaapi
 from mcp.server.fastmcp import FastMCP
