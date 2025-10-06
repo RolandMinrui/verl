@@ -9,7 +9,7 @@ cd verl
 bash scripts/install_vllm_sglang_mcore.sh # If you need to run with megatron
 USE_MEGATRON=0 bash scripts/install_vllm_sglang_mcore.sh # Or if you simply need to run with FSDP
 
-pip install --no-deps -e .
+pip install -e .
 
 pip install fastmcp jsonlines toml
 

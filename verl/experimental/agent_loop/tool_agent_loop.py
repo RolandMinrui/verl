@@ -28,7 +28,7 @@ from verl.interactions.utils.interaction_registry import initialize_interactions
 from verl.tools.schemas import ToolResponse
 from verl.utils.profiler import simple_timer
 from verl.utils.rollout_trace import rollout_trace_op
-from verl.tools.mcp_configs.mcp_tools_config import TOOL_SYSTEM_PROMPT, TOOLS_TO_IGNORE
+from tools.mcp_configs.mcp_tools_config import TOOL_SYSTEM_PROMPT, TOOLS_TO_IGNORE
 from tools.mcp_managers.client_manager import MCPClientManager
 
 logger = logging.getLogger(__file__)
