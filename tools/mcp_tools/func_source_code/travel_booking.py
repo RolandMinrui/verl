@@ -37,11 +37,11 @@ class TravelAPI:
         self._flight_cost_lookup: Dict[str, Dict[str, float]] = {}
         self.random_seed: int
 
-    def _load_scenario(
+    def load_scenario(
         self,
         scenario: Dict[str, Union[Dict, str, int, float]],
         long_context: bool = False,
-    ) -> None:
+    ) -> str:
         """
         Load a scenario from the scenarios folder
         Args:
@@ -74,8 +74,9 @@ class TravelAPI:
         if self.long_context:
             self._add_credit_cards()  # Add credit card extension for long context
             self._add_booking_records()  # Add booking record extension
+        return "Successfully loaded scenario"
 
-    def save_scenario(self) -> Dict[str, Union[Dict, str]]:
+    def save_scenario(self) -> dict:
         """
         保存当前 TravelAPI 状态到字典
         
@@ -95,7 +96,7 @@ class TravelAPI:
                 "budget_limit": self.budget_limit,
                 "random_seed": self.random_seed
             }
-            return {"scenario": scenario, "message": "Scenario saved successfully."}
+            return scenario
         except Exception as e:
             return {"error": f"Failed to save scenario: {str(e)}"}
         

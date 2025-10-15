@@ -32,7 +32,7 @@ class TicketAPI:
         self.current_user: Optional[str]
         self._api_description = "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets."
 
-    def _load_scenario(self, scenario: dict, long_context=False) -> None:
+    def load_scenario(self, scenario: dict, long_context=False) -> str:
         """
         Load a scenario into the ticket queue.
 
@@ -45,8 +45,9 @@ class TicketAPI:
             "ticket_counter", DEFAULT_STATE_COPY["ticket_counter"]
         )
         self.current_user = scenario.get("current_user", DEFAULT_STATE_COPY["current_user"])
+        return "Successfully loaded scenario"
 
-    def save_scenario(self) -> Dict[str, Union[Dict[str, Union[int, str]], str]]:
+    def save_scenario(self) -> dict:
         """
         Save current scenario from the ticket queue.
         """

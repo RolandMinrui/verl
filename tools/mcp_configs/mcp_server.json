@@ -1,0 +1,60 @@
+{
+    "mcpServers": {
+        "file_system": {
+            "local_path": "tools/mcp_tools/file_system.py",
+            "stateless": false
+        },
+        "math": {
+            "local_path": "tools/mcp_tools/math_api.py",
+            "stateless": true
+        },
+        "posting": {
+            "local_path": "tools/mcp_tools/posting.py",
+            "stateless": false
+        },
+        "ticket": {
+            "local_path": "tools/mcp_tools/ticket.py",
+            "stateless": false
+        },
+        "trading": {
+            "local_path": "tools/mcp_tools/trading.py",
+            "stateless": false
+        },
+        "travel": {
+            "local_path": "tools/mcp_tools/travel.py",
+            "stateless": false
+        },
+        "vehicle": {
+            "local_path": "tools/mcp_tools/vehicle.py",
+            "stateless": false
+        },
+        "message": {
+            "local_path": "tools/mcp_tools/message.py",
+            "stateless": false
+        },
+        "airline": {
+            "local_path": "tools/mcp_tools/airline.py",
+            "stateless": false
+        },
+        "mock": {
+            "local_path": "tools/mcp_tools/mock.py",
+            "stateless": false
+        },
+        "retail": {
+            "local_path": "tools/mcp_tools/retail.py",
+            "stateless": false
+        },
+        "telecom": {
+            "local_path": "tools/mcp_tools/telecom.py",
+            "stateless": false
+        },
+        "date": {
+            "local_path": "tools/mcp_tools/date.py",
+            "stateless": true
+        },
+        "search": {
+            "local_path": "tools/mcp_tools/search.py",
+            "stateless": true
+        }
+    }
+}
