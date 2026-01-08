@@ -1,6 +1,6 @@
 ### Envrionment Setup
 ```
-conda create -n verl python==3.11
+conda create -n verl python==3.12
 conda activate verl
 
 git clone https://github.com/RolandMinrui/verl
@@ -14,16 +14,4 @@ pip install -e .
 pip install fastmcp jsonlines toml
 
 pip install arxiv ddgs semanticscholar wikipedia-api # For search envs
-```
-
-### Environment Structure
-```
-envs/
-├── agent_loop/
-├── configs/
-├── database/
-├── manager/
-├── reward/
-├── tools/
-└── utils/
 ```

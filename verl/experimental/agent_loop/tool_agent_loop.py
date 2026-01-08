@@ -16,7 +16,6 @@ import copy
 import json
 import logging
 import os
-from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 from uuid import uuid4
@@ -28,8 +27,8 @@ from verl.interactions.utils.interaction_registry import initialize_interactions
 from verl.tools.schemas import ToolResponse
 from verl.utils.profiler import simple_timer
 from verl.utils.rollout_trace import rollout_trace_op
-from tools.mcp_configs.mcp_tools_config import TOOL_SYSTEM_PROMPT, TOOLS_TO_IGNORE
-from tools.mcp_managers.client_manager import MCPClientManager
+from tools.mcp_configs.mcp_tools_config import TOOL_SYSTEM_PROMPT
+from tools.mcp_managers.client_manager import MCPManager
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
@@ -106,13 +105,11 @@ class ToolAgentLoop(AgentLoopBase):
         cls.log_dump_path = config.data.log_dump_path
         tool_config_path = config.actor_rollout_ref.rollout.multi_turn.tool_config_path
 
-        cls.client_manager = MCPClientManager()
-        cls.client_manager.init_config(tool_config_path)
-        cls.tools = cls.client_manager.tools
-        cls.tool_schemas = cls.client_manager.tool_schemas
+        cls.tools = MCPManager.tools
+        cls.tool_schemas = MCPManager.tool_schemas
 
         cls.tool_parser = ToolParser.get_tool_parser(config.actor_rollout_ref.rollout.multi_turn.format, cls.tokenizer)
-        # print(f"Initialized tools: {cls.tools}")
+        print(f"Initialized tools: {cls.tools}")
 
         cls.apply_chat_template_kwargs = config.data.get("apply_chat_template_kwargs", {})
         cls.prompt_length = config.actor_rollout_ref.rollout.prompt_length
@@ -124,26 +121,6 @@ class ToolAgentLoop(AgentLoopBase):
         cls.interaction_config_file = config.actor_rollout_ref.rollout.multi_turn.interaction_config_path
         if cls.interaction_config_file:
             cls.interaction_map: dict[str, BaseInteraction] = cls._initialize_interactions(cls.interaction_config_file)
-
-    def filter_tools(self, involved_class: list[str] | None) -> list[dict]:
-        if involved_class is None:
-            return self.tool_schemas
-
-        filtered_tool_schemas = []
-
-        # Only keep the tools that belongs to the involved classes
-        # Remove the load_scenario and save_scenario tools from
-        # Remove the tools that are in TOOLS_TO_IGNORE
-        for tool_class in involved_class:
-            for tool_name, tool_schema in self.tools.items():
-                if tool_class in tool_name \
-                and 'load_scenario' not in tool_name \
-                and 'save_scenario' not in tool_name \
-                and tool_name not in TOOLS_TO_IGNORE:
-                    filtered_tool_schemas.append(tool_schema)
-        
-        return filtered_tool_schemas
-
 
     @rollout_trace_op
     async def run(self, sampling_params: dict[str, Any], **kwargs) -> AgentLoopOutput:
@@ -203,14 +180,14 @@ class ToolAgentLoop(AgentLoopBase):
                 state = AgentState.TERMINATED
 
         # Save all scenarios
-        saved_all_scenario = self.client_manager.save_all_scenario(agent_data.client_id_list)
+        saved_all_scenario = MCPManager.save_all_scenario(agent_data.client_id_list)
 
         # Dump log
-        self.client_manager.dump_log(agent_data.request_id, self.log_dump_path)
+        MCPManager.dump_log(agent_data.request_id, self.log_dump_path)
 
         # Close clients
         for client_id in agent_data.client_id_list:
-            self.client_manager.close_client(client_id)
+            MCPManager.close_client(client_id)
 
         # Finalize output
         response_ids = agent_data.prompt_ids[-len(agent_data.response_mask) :]
@@ -240,7 +217,7 @@ class ToolAgentLoop(AgentLoopBase):
                 None,
                 lambda: self.processor.apply_chat_template(
                     agent_data.messages,
-                    tools=self.filter_tools(agent_data.involved_class),
+                    tools=MCPManager.filter_tools(agent_data.involved_class),
                     add_generation_prompt=True,
                     tokenize=False,
                     truncation=True,
@@ -277,7 +254,7 @@ class ToolAgentLoop(AgentLoopBase):
                 image_data=agent_data.image_data,
             )
 
-        self.client_manager.add_log(
+        MCPManager.add_log(
             client_id = agent_data.request_id,
             info = {
                 "chat": {
@@ -500,14 +477,14 @@ class ToolAgentLoop(AgentLoopBase):
 
             # Load scenario
             scenario = agent_data.initial_config.get(tool_class, None)
-            tool_execution_response = self.client_manager.load_scenario(
+            tool_execution_response = MCPManager.load_scenario(
                 scenario = scenario,
                 client_id = client_id,
                 check = False,
             )
 
             # Call tool
-            tool_execution_response = self.client_manager.call_tool(
+            tool_execution_response = MCPManager.call_tool(
                 tool_name = tool_name,
                 tool_args = tool_args,
                 client_id = client_id,

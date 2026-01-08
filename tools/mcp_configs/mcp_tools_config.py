@@ -1,4 +1,4 @@
-TOOL_SYSTEM_PROMPT = '''You are an AI assistant that can call one or more tools to assist with the user query.
+TOOL_SYSTEM_PROMPT = '''You are an AI assistant that can call tools to assist with the user query.
 For each tool call, you MUST call tools provided with function signatures within <tools></tools> XML tags.
 - The tool name must be exactly the same as specified (including the prefix before the hyphen).
 After each tool call, you will receive a tool response within <tool_response></tool_response> tags.
