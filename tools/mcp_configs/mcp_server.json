@@ -1,60 +1,204 @@
 {
     "mcpServers": {
-        "file_system": {
-            "local_path": "tools/mcp_tools/file_system.py",
+        "PriceComparison": {
+            "tool_path": "envs/tools/PriceComparison.py",
             "stateless": false
         },
-        "math": {
-            "local_path": "tools/mcp_tools/math_api.py",
-            "stateless": true
-        },
-        "posting": {
-            "local_path": "tools/mcp_tools/posting.py",
+        "WhatsApp": {
+            "tool_path": "envs/tools/WhatsApp.py",
             "stateless": false
         },
-        "ticket": {
-            "local_path": "tools/mcp_tools/ticket.py",
+        "MetMuseum": {
+            "tool_path": "envs/tools/MetMuseum.py",
             "stateless": false
         },
-        "trading": {
-            "local_path": "tools/mcp_tools/trading.py",
+        "Airline": {
+            "tool_path": "envs/tools/Airline.py",
             "stateless": false
         },
-        "travel": {
-            "local_path": "tools/mcp_tools/travel.py",
+        "Calendar": {
+            "tool_path": "envs/tools/Calendar.py",
             "stateless": false
         },
-        "vehicle": {
-            "local_path": "tools/mcp_tools/vehicle.py",
+        "CampusCard": {
+            "tool_path": "envs/tools/CampusCard.py",
             "stateless": false
         },
-        "message": {
-            "local_path": "tools/mcp_tools/message.py",
+        "Canvas": {
+            "tool_path": "envs/tools/Canvas.py",
             "stateless": false
         },
-        "airline": {
-            "local_path": "tools/mcp_tools/airline.py",
+        "CarPrice": {
+            "tool_path": "envs/tools/CarPrice.py",
             "stateless": false
         },
-        "mock": {
-            "local_path": "tools/mcp_tools/mock.py",
+        "ChinaRailway": {
+            "tool_path": "envs/tools/ChinaRailway.py",
             "stateless": false
         },
-        "retail": {
-            "local_path": "tools/mcp_tools/retail.py",
+        "CryptoPrice": {
+            "tool_path": "envs/tools/CryptoPrice.py",
             "stateless": false
         },
-        "telecom": {
-            "local_path": "tools/mcp_tools/telecom.py",
+        "Didi": {
+            "tool_path": "envs/tools/Didi.py",
             "stateless": false
         },
-        "date": {
-            "local_path": "tools/mcp_tools/date.py",
-            "stateless": true
+        "ExcelServer": {
+            "tool_path": "envs/tools/ExcelServer.py",
+            "stateless": false
         },
-        "search": {
-            "local_path": "tools/mcp_tools/search.py",
-            "stateless": true
+        "Filesystem": {
+            "tool_path": "envs/tools/Filesystem.py",
+            "stateless": false
+        },
+        "FinancialDatasets": {
+            "tool_path": "envs/tools/FinancialDatasets.py",
+            "stateless": false
+        },
+        "FruityviceServer": {
+            "tool_path": "envs/tools/FruityviceServer.py",
+            "stateless": false
+        },
+        "GameTrending": {
+            "tool_path": "envs/tools/GameTrending.py",
+            "stateless": false
+        },
+        "GitHubServer": {
+            "tool_path": "envs/tools/GitHubServer.py",
+            "stateless": false
+        },
+        "GithubTrending": {
+            "tool_path": "envs/tools/GithubTrending.py",
+            "stateless": false
+        },
+        "GitServer": {
+            "tool_path": "envs/tools/GitServer.py",
+            "stateless": false
+        },
+        "GoogleSheets": {
+            "tool_path": "envs/tools/GoogleSheets.py",
+            "stateless": false
+        },
+        "GoogleTasks": {
+            "tool_path": "envs/tools/GoogleTasks.py",
+            "stateless": false
+        },
+        "HackerNews": {
+            "tool_path": "envs/tools/HackerNews.py",
+            "stateless": false
+        },
+        "HKBus": {
+            "tool_path": "envs/tools/HKBus.py",
+            "stateless": false
+        },
+        "HotelBooking": {
+            "tool_path": "envs/tools/HotelBooking.py",
+            "stateless": false
+        },
+        "HowToCook": {
+            "tool_path": "envs/tools/HowToCook.py",
+            "stateless": false
+        },
+        "HugeiconsServer": {
+            "tool_path": "envs/tools/HugeiconsServer.py",
+            "stateless": false
+        },
+        "KospiKosdaqStock": {
+            "tool_path": "envs/tools/KospiKosdaqStock.py",
+            "stateless": false
+        },
+        "Kuaidi100": {
+            "tool_path": "envs/tools/Kuaidi100.py",
+            "stateless": false
+        },
+        "LeagueOfLegends": {
+            "tool_path": "envs/tools/LeagueOfLegends.py",
+            "stateless": false
+        },
+        "Maps": {
+            "tool_path": "envs/tools/Maps.py",
+            "stateless": false
+        },
+        "Message": {
+            "tool_path": "envs/tools/Message.py",
+            "stateless": false
+        },
+        "MovieRecommender": {
+            "tool_path": "envs/tools/MovieRecommender.py",
+            "stateless": false
+        },
+        "MusicAnalysis": {
+            "tool_path": "envs/tools/MusicAnalysis.py",
+            "stateless": false
+        },
+        "Notion": {
+            "tool_path": "envs/tools/Notion.py",
+            "stateless": false
+        },
+        "Posting": {
+            "tool_path": "envs/tools/Posting.py",
+            "stateless": false
+        },
+        "Retail": {
+            "tool_path": "envs/tools/Retail.py",
+            "stateless": false
+        },
+        "SimpleArxiv": {
+            "tool_path": "envs/tools/SimpleArxiv.py",
+            "stateless": false
+        },
+        "Telecom": {
+            "tool_path": "envs/tools/Telecom.py",
+            "stateless": false
+        },
+        "TFTServer": {
+            "tool_path": "envs/tools/TFTServer.py",
+            "stateless": false
+        },
+        "TicketManagementSystem": {
+            "tool_path": "envs/tools/TicketManagementSystem.py",
+            "stateless": false
+        },
+        "TickTick": {
+            "tool_path": "envs/tools/TickTick.py",
+            "stateless": false
+        },
+        "TradingBot": {
+            "tool_path": "envs/tools/TradingBot.py",
+            "stateless": false
+        },
+        "TravelBooking": {
+            "tool_path": "envs/tools/TravelBooking.py",
+            "stateless": false
+        },
+        "UUPaoTui": {
+            "tool_path": "envs/tools/UUPaoTui.py",
+            "stateless": false
+        },
+        "Valorant": {
+            "tool_path": "envs/tools/Valorant.py",
+            "stateless": false
+        },
+        "VehicleControl": {
+            "tool_path": "envs/tools/VehicleControl.py",
+            "stateless": false
+        },
+        "Weather": {
+            "tool_path": "envs/tools/Weather.py",
+            "stateless": false
+        },
+        "WuWa": {
+            "tool_path": "envs/tools/WuWa.py",
+            "stateless": false
+        },
+        "YahooFinance": {
+            "tool_path": "envs/tools/YahooFinance.py",
+            "stateless": false
+        },
+        "GorillaFileSystem": {
+            "tool_path": "envs/tools/GorillaFileSystem.py",
+            "stateless": false
         }
     }
 }
