@@ -89,49 +89,48 @@ def normalize_ground_truth_calls(ground_truth_calls: List[str]) -> List[str]:
     
     return normalized_calls
 
-def parse_ground_truth(ground_truth: str) -> List[str]:
+def mask_calls(gt_calls: list[dict], sol_calls: list[dict]) -> tuple:
+    pass
+
+def parse_ground_truth(ground_truth: str | list[dict]) -> List[str]:
     """
-    parse the ground_truth, support JSON list format
+    Parse ground truth tool calls into JSON dict.
+    - name (str): 
+    - arguments (dict): 
+    - masked_arguments (list): 
     """
     try:
-        if ground_truth.strip().startswith('['):
-            calls = json.loads(ground_truth)
-        else:
-            calls = [line.strip() for line in ground_truth.strip().split('\n') if line.strip()]
-        
-        # Normalize ground truth calls
-        return normalize_ground_truth_calls(calls)
-    except json.JSONDecodeError:
-        calls = [line.strip() for line in ground_truth.strip().split('\n') if line.strip()]
-        return normalize_ground_truth_calls(calls)
+        ground_truth_calls = json.loads(ground_truth)
+    except:
+        ground_truth_calls = []
 
 def _compute_trace_score(solution: str, ground_truth: str) -> float:
-    # 1. extract the tool_calls from solution
-    solution_calls = extract_tool_calls(solution)
+    """
+    Compute trace reward score.
+    Return 1.0 if ground truth tool calls is a subset of any permutation of solution tool calls.
+    """
+    # 1. Extract solution tool calls
+    sol_calls = extract_tool_calls(solution)
     
-    # 2. parse the ground_truth (already normalized)
-    ground_truth_calls = parse_ground_truth(ground_truth)
+    # 2. Parse ground truth tool calls
+    gt_calls = parse_ground_truth(ground_truth)
 
-    # 3. if no tool_calls are extracted, return 0
-    if not solution_calls:
+    # 3. If no sol_calls, return 0
+    if not sol_calls:
         return 0.0
     
-    # 4. if the ground_truth is empty, return 1
-    if not ground_truth_calls:
+    # 4. If no gt_calls, return 1
+    if not gt_calls:
         return 1.0
-    
-    # 5. check if the ground_truth is a subsequence of solution
-    gt_idx = 0
-    for sol_call in solution_calls:
-        if gt_idx < len(ground_truth_calls) and sol_call == ground_truth_calls[gt_idx]:
-            gt_idx += 1
-    
-    if gt_idx == len(ground_truth_calls):
-        total_score = 1.0
-    else:
-        total_score = 0.0
 
-    return total_score
+    # 5. Normalize calls
+    gt_calls, sol_calls = mask_calls(gt_calls, sol_calls)
+    
+    # 6. Check if ground truth is a subset of any permutation of solution
+    for gt in gt_calls:
+        if gt not in sol_calls:
+            return 0.0
+    return 1.0
 
 def _compute_length_penalty(solution, ground_truth) -> float:
     length_ratio = len(solution) / len(ground_truth) if len(ground_truth) > 0 else 1.0
@@ -191,22 +190,21 @@ def _compute_answer_score(solution: str | dict, ground_truth: str | dict) -> flo
     else:
         return 0.0
 
-def compute_score(solution_str: str, ground_truth: str, extra_info=None) -> float:
+def compute_score(solution: str, ground_truth: str, extra_info=None) -> float:
     """
-    calculate the score of solution relative to ground_truth, only return the numerical value
+    calculate the reward for tool calling agent,.
     
     Args:
-        solution_str: the solution text containing tool_calls
+        solution: the solution text containing tool_calls
         ground_truth: the correct answer tool_call sequence
-        format_score: the base score when the format is correct
         extra_info: extra information
     
     Returns:
-        float: solution==grouth_truch - length_penalty + format_score
+        reward (str) = w1 * trace_score + w2 * state_score
     """
     try:
         trace_score = _compute_trace_score(
-            solution=solution_str,
+            solution=solution,
             ground_truth=ground_truth,
         )
 
