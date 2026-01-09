@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-from datetime import datetime, timedelta
 
 # Section 1: Schema
 class Customer(BaseModel):
@@ -52,6 +51,7 @@ class TelecomScenario(BaseModel):
         "IN": 18.0, "CN": 16.0, "RU": 14.0, "ZA": 18.0, "NG": 15.0,
         "EG": 12.0, "AR": 10.0, "CL": 11.0, "CO": 9.0, "PE": 10.0
     }, description="Daily roaming charges by country (USD)")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Customer, Bill, Line, TelecomScenario]
 
@@ -64,6 +64,7 @@ class TelecomAPI:
         self.lines: Dict[str, Line] = {}
         self.dataRefuelRatesMap: Dict[str, float] = {}
         self.roamingRatesMap: Dict[str, float] = {}
+        self.current_time: str = ""
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -73,6 +74,7 @@ class TelecomAPI:
         self.lines = model.lines
         self.dataRefuelRatesMap = model.dataRefuelRatesMap
         self.roamingRatesMap = model.roamingRatesMap
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -81,7 +83,8 @@ class TelecomAPI:
             "bills": {k: v.dict() for k, v in self.bills.items()},
             "lines": {k: v.dict() for k, v in self.lines.items()},
             "dataRefuelRatesMap": self.dataRefuelRatesMap,
-            "roamingRatesMap": self.roamingRatesMap
+            "roamingRatesMap": self.roamingRatesMap,
+            "current_time": self.current_time
         }
 
     def get_customer_by_phone(self, phone_number: str) -> dict:
@@ -159,7 +162,7 @@ class TelecomAPI:
         return {
             "line_id": line.line_id,
             "status": line.status,
-            "suspension_start_date": datetime.now().strftime("%Y-%m-%d")
+            "suspension_start_date": self.current_time[:10]
         }
 
     def resume_line(self, customer_id: str, line_id: str) -> dict:

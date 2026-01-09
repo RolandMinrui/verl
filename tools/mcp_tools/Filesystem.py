@@ -1,12 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
-import os
 import base64
-import mimetypes
 import glob
-import json
-from datetime import datetime
 
 # Section 1: Schema
 class FileEntry(BaseModel):
@@ -39,6 +35,9 @@ class TreeNode(BaseModel):
 
 class FilesystemScenario(BaseModel):
     """Main scenario model for filesystem operations."""
+    files: Dict[str, str] = Field(default={}, description="File contents indexed by absolute path")
+    directories: Dict[str, List[str]] = Field(default={}, description="Directory contents indexed by absolute path, value is list of child names")
+    file_metadata: Dict[str, FileInfo] = Field(default={}, description="File metadata indexed by absolute path")
     allowed_extensions: List[str] = Field(default=[".txt", ".md", ".py", ".json", ".csv", ".xml", ".html", ".css", ".js", ".ts"], description="Allowed file extensions for text operations")
     max_file_size: int = Field(default=10485760, ge=0, description="Maximum file size in bytes (10MB)")
     binary_extensions: List[str] = Field(default=[".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".mp3", ".wav", ".mp4", ".avi", ".pdf", ".zip"], description="Binary file extensions for media operations")
@@ -51,6 +50,7 @@ class FilesystemScenario(BaseModel):
         ".ico": "image/x-icon", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".mp4": "video/mp4",
         ".avi": "video/x-msvideo", ".pdf": "application/pdf", ".zip": "application/zip"
     }, description="MIME type mapping by file extension")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [FileEntry, FileInfo, FileResult, TreeNode, FilesystemScenario]
 
@@ -58,61 +58,139 @@ Scenario_Schema = [FileEntry, FileInfo, FileResult, TreeNode, FilesystemScenario
 class FilesystemAPI:
     def __init__(self):
         """Initialize filesystem API with default settings."""
+        self.files: Dict[str, str] = {}
+        self.directories: Dict[str, List[str]] = {}
+        self.file_metadata: Dict[str, FileInfo] = {}
         self.allowed_extensions: List[str] = []
         self.max_file_size: int = 0
         self.binary_extensions: List[str] = []
         self.exclude_patterns_default: List[str] = []
         self.mime_types_map: Dict[str, str] = {}
+        self.current_time: str = ""
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario configuration into the API instance."""
         model = FilesystemScenario(**scenario)
+        self.files = model.files
+        self.directories = model.directories
+        self.file_metadata = {}
+        for k, v in model.file_metadata.items():
+            if isinstance(v, dict):
+                self.file_metadata[k] = FileInfo(**v)
+            else:
+                self.file_metadata[k] = v
         self.allowed_extensions = model.allowed_extensions
         self.max_file_size = model.max_file_size
         self.binary_extensions = model.binary_extensions
         self.exclude_patterns_default = model.exclude_patterns_default
         self.mime_types_map = model.mime_types_map
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current configuration as scenario dictionary."""
         return {
+            "files": self.files,
+            "directories": self.directories,
+            "file_metadata": {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in self.file_metadata.items()},
             "allowed_extensions": self.allowed_extensions,
             "max_file_size": self.max_file_size,
             "binary_extensions": self.binary_extensions,
             "exclude_patterns_default": self.exclude_patterns_default,
-            "mime_types_map": self.mime_types_map
+            "mime_types_map": self.mime_types_map,
+            "current_time": self.current_time
         }
+    
+    def _normalize_path(self, path: str) -> str:
+        """Normalize path to use forward slashes."""
+        return path.replace("\\", "/")
+    
+    def _get_parent_path(self, path: str) -> str:
+        """Get parent directory path."""
+        normalized = self._normalize_path(path)
+        if normalized == "/":
+            return "/"
+        parts = normalized.rstrip("/").split("/")
+        if len(parts) == 1:
+            return "/"
+        return "/".join(parts[:-1]) or "/"
+    
+    def _get_name(self, path: str) -> str:
+        """Get file/directory name from path."""
+        normalized = self._normalize_path(path)
+        if normalized == "/":
+            return "/"
+        return normalized.rstrip("/").split("/")[-1]
+    
+    def _is_directory(self, path: str) -> bool:
+        """Check if path is a directory."""
+        return path in self.directories
+    
+    def _is_file(self, path: str) -> bool:
+        """Check if path is a file."""
+        return path in self.files
+    
+    def _ensure_directory_exists(self, path: str) -> None:
+        """Ensure directory and all parent directories exist."""
+        if path == "/":
+            if "/" not in self.directories:
+                self.directories["/"] = []
+            return
+        
+        parent = self._get_parent_path(path)
+        self._ensure_directory_exists(parent)
+        
+        if path not in self.directories:
+            self.directories[path] = []
+            parent_children = self.directories.get(parent, [])
+            name = self._get_name(path)
+            if name not in parent_children:
+                parent_children.append(name)
+                self.directories[parent] = parent_children
 
     def read_text_file(self, path: str, head: Optional[int] = None, tail: Optional[int] = None) -> dict:
         """Read text file content with optional line filtering."""
-        with open(path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+        normalized_path = self._normalize_path(path)
+        if normalized_path not in self.files:
+            return {"file_content": ""}
+        
+        content = self.files[normalized_path]
+        lines = content.split('\n')
         
         if head is not None:
             lines = lines[:head]
         elif tail is not None:
             lines = lines[-tail:]
         
-        return {"file_content": ''.join(lines)}
+        return {"file_content": '\n'.join(lines)}
 
     def read_media_file(self, path: str) -> dict:
         """Read binary media file and return base64 encoded data."""
-        with open(path, 'rb') as f:
-            data = base64.b64encode(f.read()).decode('utf-8')
+        normalized_path = self._normalize_path(path)
+        if normalized_path not in self.files:
+            return {"data": "", "mime_type": "application/octet-stream"}
         
-        mime_type = self._get_mime_type(path)
+        content = self.files[normalized_path]
+        # For binary files stored as strings, encode to base64
+        data = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        
+        mime_type = self._get_mime_type(normalized_path)
         return {"data": data, "mime_type": mime_type}
 
     def read_multiple_files(self, paths: List[str]) -> dict:
         """Read multiple files and return results with errors."""
         results = []
         for path in paths:
+            normalized_path = self._normalize_path(path)
+            if normalized_path not in self.files:
+                results.append({"path": path, "content": None, "error": f"File not found: {path}"})
+                continue
+            
             try:
-                if self._is_binary_file(path):
-                    result = self.read_media_file(path)
+                if self._is_binary_file(normalized_path):
+                    result = self.read_media_file(normalized_path)
                     content = f"[Binary file: {result['mime_type']}, {len(result['data'])} bytes]"
                 else:
-                    result = self.read_text_file(path)
+                    result = self.read_text_file(normalized_path)
                     content = result['file_content']
                 results.append({"path": path, "content": content, "error": None})
             except Exception as e:
@@ -121,16 +199,38 @@ class FilesystemAPI:
 
     def write_file(self, path: str, content: str) -> dict:
         """Create or overwrite file with specified content."""
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        normalized_path = self._normalize_path(path)
+        parent = self._get_parent_path(normalized_path)
+        self._ensure_directory_exists(parent)
+        
+        self.files[normalized_path] = content
+        name = self._get_name(normalized_path)
+        parent_children = self.directories.get(parent, [])
+        if name not in parent_children:
+            parent_children.append(name)
+            self.directories[parent] = parent_children
+        
+        # Update metadata
+        now = self.current_time
+        self.file_metadata[normalized_path] = FileInfo(
+            path=normalized_path,
+            type="file",
+            size=len(content.encode('utf-8')),
+            created_time=now,
+            modified_time=now,
+            access_time=now,
+            permissions="rw-r--r--"
+        )
+        
         return {"path": path, "success": "File written successfully"}
 
     def edit_file(self, path: str, oldText: Optional[str] = None, newText: Optional[str] = None, dryRun: bool = False) -> dict:
         """Edit file with pattern matching and optional dry run."""
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        normalized_path = self._normalize_path(path)
+        if normalized_path not in self.files:
+            return {"diff": "", "matches": [], "applied": False}
         
+        content = self.files[normalized_path]
         original_content = content
         matches = []
         
@@ -144,8 +244,10 @@ class FilesystemAPI:
                 content = content.replace(oldText, newText)
         
         if not dryRun and content != original_content:
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            self.files[normalized_path] = content
+            if normalized_path in self.file_metadata:
+                self.file_metadata[normalized_path].modified_time = self.current_time
+                self.file_metadata[normalized_path].size = len(content.encode('utf-8'))
         
         import difflib
         diff = '\n'.join(difflib.unified_diff(
@@ -160,28 +262,110 @@ class FilesystemAPI:
 
     def create_directory(self, path: str) -> dict:
         """Create directory or ensure it exists."""
-        created = not os.path.exists(path)
-        os.makedirs(path, exist_ok=True)
+        normalized_path = self._normalize_path(path)
+        created = normalized_path not in self.directories
+        
+        self._ensure_directory_exists(normalized_path)
+        
+        # Update metadata
+        now = self.current_time
+        self.file_metadata[normalized_path] = FileInfo(
+            path=normalized_path,
+            type="directory",
+            size=0,
+            created_time=now,
+            modified_time=now,
+            access_time=now,
+            permissions="rwxr-xr-x"
+        )
+        
         return {"path": path, "created": created}
 
     def list_directory(self, path: str) -> dict:
         """List directory contents with metadata."""
+        normalized_path = self._normalize_path(path)
         entries = []
-        for name in os.listdir(path):
-            full_path = os.path.join(path, name)
-            stat = os.stat(full_path)
-            entry_type = "DIR" if os.path.isdir(full_path) else "FILE"
+        
+        if normalized_path not in self.directories:
+            return {"entries": entries}
+        
+        for name in self.directories[normalized_path]:
+            child_path = normalized_path.rstrip("/") + "/" + name if normalized_path != "/" else "/" + name
+            if child_path in self.directories:
+                entry_type = "DIR"
+                size = 0
+            elif child_path in self.files:
+                entry_type = "FILE"
+                size = len(self.files[child_path].encode('utf-8'))
+            else:
+                continue
+            
             entries.append({
                 "name": name,
                 "type": entry_type,
-                "size": stat.st_size
+                "size": size
             })
+        
         return {"entries": entries}
 
     def move_file(self, source: str, destination: str) -> dict:
         """Move or rename file/directory."""
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        os.rename(source, destination)
+        normalized_source = self._normalize_path(source)
+        normalized_dest = self._normalize_path(destination)
+        
+        # Ensure destination parent directory exists
+        dest_parent = self._get_parent_path(normalized_dest)
+        self._ensure_directory_exists(dest_parent)
+        
+        # Move file
+        if normalized_source in self.files:
+            self.files[normalized_dest] = self.files.pop(normalized_source)
+            if normalized_source in self.file_metadata:
+                metadata = self.file_metadata.pop(normalized_source)
+                metadata.path = normalized_dest
+                self.file_metadata[normalized_dest] = metadata
+            
+            # Update parent directories
+            source_parent = self._get_parent_path(normalized_source)
+            source_name = self._get_name(normalized_source)
+            if source_parent in self.directories and source_name in self.directories[source_parent]:
+                self.directories[source_parent].remove(source_name)
+            
+            dest_name = self._get_name(normalized_dest)
+            dest_parent_children = self.directories.get(dest_parent, [])
+            if dest_name not in dest_parent_children:
+                dest_parent_children.append(dest_name)
+                self.directories[dest_parent] = dest_parent_children
+        
+        # Move directory
+        elif normalized_source in self.directories:
+            children = self.directories.pop(normalized_source)
+            self.directories[normalized_dest] = children
+            
+            # Update all child paths
+            for child_name in children:
+                old_child_path = normalized_source.rstrip("/") + "/" + child_name if normalized_source != "/" else "/" + child_name
+                new_child_path = normalized_dest.rstrip("/") + "/" + child_name if normalized_dest != "/" else "/" + child_name
+                
+                if old_child_path in self.files:
+                    self.files[new_child_path] = self.files.pop(old_child_path)
+                elif old_child_path in self.directories:
+                    self.directories[new_child_path] = self.directories.pop(old_child_path)
+            
+            # Update parent directories
+            source_parent = self._get_parent_path(normalized_source)
+            source_name = self._get_name(normalized_source)
+            if source_parent in self.directories and source_name in self.directories[source_parent]:
+                self.directories[source_parent].remove(source_name)
+            
+            dest_name = self._get_name(normalized_dest)
+            dest_parent_children = self.directories.get(dest_parent, [])
+            if dest_name not in dest_parent_children:
+                dest_parent_children.append(dest_name)
+                self.directories[dest_parent] = dest_parent_children
+        else:
+            return {"source": source, "destination": destination, "success": False}
+        
         return {"source": source, "destination": destination, "success": True}
 
     def search_files(self, path: str, pattern: str, excludePatterns: Optional[List[str]] = None) -> dict:
@@ -189,11 +373,16 @@ class FilesystemAPI:
         if excludePatterns is None:
             excludePatterns = self.exclude_patterns_default
         
+        normalized_path = self._normalize_path(path)
         matches = []
-        for root, dirs, files in os.walk(path):
-            for name in files + dirs:
-                full_path = os.path.join(root, name)
-                rel_path = os.path.relpath(full_path, path)
+        
+        def search_recursive(current_path: str, base_path: str) -> None:
+            if current_path not in self.directories:
+                return
+            
+            for name in self.directories[current_path]:
+                child_path = current_path.rstrip("/") + "/" + name if current_path != "/" else "/" + name
+                rel_path = child_path[len(base_path):].lstrip("/")
                 
                 if glob.fnmatch.fnmatch(rel_path, pattern):
                     excluded = False
@@ -203,8 +392,12 @@ class FilesystemAPI:
                             break
                     
                     if not excluded:
-                        matches.append(full_path)
+                        matches.append(child_path)
+                
+                if child_path in self.directories:
+                    search_recursive(child_path, base_path)
         
+        search_recursive(normalized_path, normalized_path)
         return {"matches": matches}
 
     def directory_tree(self, path: str, excludePatterns: Optional[List[str]] = None) -> dict:
@@ -212,79 +405,113 @@ class FilesystemAPI:
         if excludePatterns is None:
             excludePatterns = self.exclude_patterns_default
         
-        def build_tree(current_path: str) -> List[dict]:
+        normalized_path = self._normalize_path(path)
+        
+        def build_tree(current_path: str, base_path: str) -> List[dict]:
             tree = []
-            try:
-                for name in sorted(os.listdir(current_path)):
-                    full_path = os.path.join(current_path, name)
-                    rel_path = os.path.relpath(full_path, path)
-                    
-                    excluded = False
-                    for pattern in excludePatterns:
-                        if glob.fnmatch.fnmatch(rel_path, pattern):
-                            excluded = True
-                            break
-                    
-                    if excluded:
-                        continue
-                    
-                    if os.path.isdir(full_path):
-                        node = {
-                            "name": name,
-                            "type": "directory",
-                            "children": build_tree(full_path)
-                        }
-                    else:
-                        node = {
-                            "name": name,
-                            "type": "file"
-                        }
-                    tree.append(node)
-            except PermissionError:
-                pass
+            if current_path not in self.directories:
+                return tree
+            
+            for name in sorted(self.directories[current_path]):
+                child_path = current_path.rstrip("/") + "/" + name if current_path != "/" else "/" + name
+                rel_path = child_path[len(base_path):].lstrip("/")
+                
+                excluded = False
+                for pattern in excludePatterns:
+                    if glob.fnmatch.fnmatch(rel_path, pattern):
+                        excluded = True
+                        break
+                
+                if excluded:
+                    continue
+                
+                if child_path in self.directories:
+                    node = {
+                        "name": name,
+                        "type": "directory",
+                        "children": build_tree(child_path, base_path)
+                    }
+                elif child_path in self.files:
+                    node = {
+                        "name": name,
+                        "type": "file"
+                    }
+                else:
+                    continue
+                
+                tree.append(node)
+            
             return tree
         
-        return {"tree": build_tree(path)}
+        return {"tree": build_tree(normalized_path, normalized_path)}
 
     def get_file_info(self, path: str) -> dict:
         """Get detailed file/directory metadata."""
-        stat = os.stat(path)
-        mode = stat.st_mode
-        permissions = self._get_permissions(mode)
+        normalized_path = self._normalize_path(path)
+        
+        if normalized_path in self.file_metadata:
+            metadata = self.file_metadata[normalized_path]
+            return {
+                "path": metadata.path,
+                "type": metadata.type,
+                "size": metadata.size,
+                "created_time": metadata.created_time,
+                "modified_time": metadata.modified_time,
+                "access_time": metadata.access_time,
+                "permissions": metadata.permissions
+            }
+        
+        # Create default metadata if not exists
+        now = self.current_time
+        if normalized_path in self.directories:
+            file_type = "directory"
+            size = 0
+            permissions = "rwxr-xr-x"
+        elif normalized_path in self.files:
+            file_type = "file"
+            size = len(self.files[normalized_path].encode('utf-8'))
+            permissions = "rw-r--r--"
+        else:
+            return {
+                "path": path,
+                "type": "file",
+                "size": 0,
+                "created_time": now,
+                "modified_time": now,
+                "access_time": now,
+                "permissions": "rw-r--r--"
+            }
+        
+        metadata = FileInfo(
+            path=normalized_path,
+            type=file_type,
+            size=size,
+            created_time=now,
+            modified_time=now,
+            access_time=now,
+            permissions=permissions
+        )
+        self.file_metadata[normalized_path] = metadata
         
         return {
-            "path": path,
-            "type": "directory" if os.path.isdir(path) else "file",
-            "size": stat.st_size,
-            "created_time": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-            "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            "access_time": datetime.fromtimestamp(stat.st_atime).isoformat(),
-            "permissions": permissions
+            "path": metadata.path,
+            "type": metadata.type,
+            "size": metadata.size,
+            "created_time": metadata.created_time,
+            "modified_time": metadata.modified_time,
+            "access_time": metadata.access_time,
+            "permissions": metadata.permissions
         }
 
     def _get_mime_type(self, path: str) -> str:
         """Get MIME type for file path."""
-        ext = os.path.splitext(path)[1].lower()
+        ext = "." + path.split(".")[-1] if "." in path else ""
         return self.mime_types_map.get(ext, "application/octet-stream")
 
     def _is_binary_file(self, path: str) -> bool:
         """Check if file should be treated as binary."""
-        ext = os.path.splitext(path)[1].lower()
+        ext = "." + path.split(".")[-1] if "." in path else ""
         return ext in self.binary_extensions
-
-    def _get_permissions(self, mode: int) -> str:
-        """Convert file mode to symbolic permissions string."""
-        perms = []
-        perms.append('r' if mode & 0o400 else '-')
-        perms.append('w' if mode & 0o200 else '-')
-        perms.append('x' if mode & 0o100 else '-')
-        perms.append('r' if mode & 0o040 else '-')
-        perms.append('w' if mode & 0o020 else '-')
-        perms.append('x' if mode & 0o010 else '-')
-        perms.append('r' if mode & 0o004 else '-')
-        perms.append('w' if mode & 0o002 else '-')
-        perms.append('x' if mode & 0o001 else '-')
-        return ''.join(perms)
 
 # Section 3: MCP Tools
 mcp = FastMCP(name="FilesystemAPI")
@@ -452,8 +679,6 @@ def list_directory(path: str) -> dict:
     try:
         if not path or not isinstance(path, str):
             raise ValueError("Path must be a non-empty string")
-        if not os.path.exists(path):
-            raise ValueError(f"Directory {path} not found")
         return api.list_directory(path)
     except Exception as e:
         raise e
@@ -476,8 +701,6 @@ def move_file(source: str, destination: str) -> dict:
             raise ValueError("Source must be a non-empty string")
         if not destination or not isinstance(destination, str):
             raise ValueError("Destination must be a non-empty string")
-        if not os.path.exists(source):
-            raise ValueError(f"Source {source} not found")
         return api.move_file(source, destination)
     except Exception as e:
         raise e
@@ -499,8 +722,6 @@ def search_files(path: str, pattern: str, excludePatterns: Optional[List[str]] =
             raise ValueError("Path must be a non-empty string")
         if not pattern or not isinstance(pattern, str):
             raise ValueError("Pattern must be a non-empty string")
-        if not os.path.exists(path):
-            raise ValueError(f"Directory {path} not found")
         return api.search_files(path, pattern, excludePatterns)
     except Exception as e:
         raise e
@@ -519,8 +740,6 @@ def directory_tree(path: str, excludePatterns: Optional[List[str]] = None) -> di
     try:
         if not path or not isinstance(path, str):
             raise ValueError("Path must be a non-empty string")
-        if not os.path.exists(path):
-            raise ValueError(f"Directory {path} not found")
         return api.directory_tree(path, excludePatterns)
     except Exception as e:
         raise e
@@ -544,8 +763,6 @@ def get_file_info(path: str) -> dict:
     try:
         if not path or not isinstance(path, str):
             raise ValueError("Path must be a non-empty string")
-        if not os.path.exists(path):
-            raise ValueError(f"Path {path} not found")
         return api.get_file_info(path)
     except Exception as e:
         raise e

@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 import uuid
 import random
 
@@ -72,6 +71,7 @@ class TravelBookingScenario(BaseModel):
     insurance_quotes: Dict[str, Dict[str, dict]] = Field(default={}, description="Insurance quotes by booking and type")
     insurance_policies: Dict[str, dict] = Field(default={}, description="Purchased insurance policies")
     support_tickets: List[dict] = Field(default=[], description="Customer support tickets")
+    current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [User, Flight, CreditCard, Booking, TravelBookingScenario]
 
@@ -90,6 +90,7 @@ class TravelBookingAPI:
         self.insurance_quotes: Dict[str, Dict[str, dict]] = {}
         self.insurance_policies: Dict[str, dict] = {}
         self.support_tickets: List[dict] = []
+        self.current_time: str = "2024-01-01T00:00:00"
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -105,6 +106,7 @@ class TravelBookingAPI:
         self.insurance_quotes = model.insurance_quotes
         self.insurance_policies = model.insurance_policies
         self.support_tickets = model.support_tickets
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -119,7 +121,8 @@ class TravelBookingAPI:
             "exchange_rates": self.exchange_rates,
             "insurance_quotes": self.insurance_quotes,
             "insurance_policies": self.insurance_policies,
-            "support_tickets": self.support_tickets
+            "support_tickets": self.support_tickets,
+            "current_time": self.current_time
         }
 
     def authenticate(self, client_id: str, client_secret: str, grant_type: str, first_name: str, last_name: str) -> dict:
@@ -133,7 +136,7 @@ class TravelBookingAPI:
             token_type="Bearer",
             expires_in=3600,
             scope=grant_type,
-            created_at=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            created_at=self.current_time
         )
         self.authenticated_users[access_token] = user
         return {
@@ -257,7 +260,7 @@ class TravelBookingAPI:
             arrival_airport=arrival_airport,
             travel_date=travel_date,
             travel_class=travel_class,
-            booking_date=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            booking_date=self.current_time,
             traveler_first_name=traveler_first_name,
             traveler_last_name=traveler_last_name
         )
@@ -316,7 +319,7 @@ class TravelBookingAPI:
             "cancellation_status": True,
             "refund_amount": booking.cost,
             "refund_transaction_id": refund_transaction_id,
-            "cancellation_date": datetime.datetime.now().strftime("%Y-%m-%d")
+            "cancellation_date": self.current_time[:10]  # Extract date part
         }
 
     def list_bookings(self, access_token: str, start_date: Optional[str] = None, end_date: Optional[str] = None, status: Optional[str] = None) -> dict:
@@ -442,7 +445,7 @@ class TravelBookingAPI:
             "from_currency": from_currency,
             "to_currency": to_currency,
             "exchange_rate": round(exchange_rate, 4),
-            "conversion_date": datetime.datetime.now().strftime("%Y-%m-%d")
+            "conversion_date": self.current_time[:10]  # Extract date part
         }
 
     def contact_support(self, access_token: str, message: str, booking_id: Optional[str] = None, subject: Optional[str] = None) -> dict:
@@ -456,7 +459,7 @@ class TravelBookingAPI:
             "subject": subject or "General Inquiry",
             "message": message,
             "booking_id": booking_id,
-            "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            "created_at": self.current_time
         }
         
         self.support_tickets.append(ticket)

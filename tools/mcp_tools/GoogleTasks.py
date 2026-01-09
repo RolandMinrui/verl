@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
-from datetime import datetime, timedelta
+from datetime import  timedelta
 import re
 
 # Section 1: Schema
@@ -29,6 +29,7 @@ class GoogleTasksScenario(BaseModel):
     next_tasklist_id: int = Field(default=1, ge=1, description="Next available tasklist ID counter")
     next_task_id: int = Field(default=1, ge=1, description="Next available task ID counter")
     default_tasklist_id: str = Field(default="@default", description="Default task list ID")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [TaskList, Task, GoogleTasksScenario]
 
@@ -41,6 +42,7 @@ class GoogleTasksAPI:
         self.next_tasklist_id: int = 1
         self.next_task_id: int = 1
         self.default_tasklist_id: str = "@default"
+        self.current_time: str = ""
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -50,6 +52,7 @@ class GoogleTasksAPI:
         self.next_tasklist_id = model.next_tasklist_id
         self.next_task_id = model.next_task_id
         self.default_tasklist_id = model.default_tasklist_id
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -58,7 +61,8 @@ class GoogleTasksAPI:
             "tasks": {tid: t.dict() for tid, t in self.tasks.items()},
             "next_tasklist_id": self.next_tasklist_id,
             "next_task_id": self.next_task_id,
-            "default_tasklist_id": self.default_tasklist_id
+            "default_tasklist_id": self.default_tasklist_id,
+            "current_time": self.current_time
         }
 
     def list_task_lists(self, max_results: Optional[int] = None, page_token: Optional[str] = None) -> dict:
@@ -316,10 +320,12 @@ class GoogleTasksAPI:
             tasklist_id = self.default_tasklist_id
         
         # Calculate date range
-        now = datetime.utcnow()
-        future = now + timedelta(days=days_ahead)
-        now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        future_str = future.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Parse current_time and add days_ahead
+        from datetime import datetime as dt
+        now_dt = dt.strptime(self.current_time, "%Y-%m-%dT%H:%M:%S")
+        future_dt = now_dt + timedelta(days=days_ahead)
+        now_str = self.current_time + "Z"
+        future_str = future_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         
         upcoming_tasks = []
         for task in self.tasks.values():

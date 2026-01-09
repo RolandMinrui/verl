@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 
 # Section 1: Schema
 class Repository(BaseModel):
@@ -68,6 +67,7 @@ class GitHubScenario(BaseModel):
     current_user: Optional[Dict[str, str]] = Field(default=None, description="Current user info")
     next_issue_number: Dict[str, int] = Field(default={}, description="Next issue number by repo")
     next_pr_number: Dict[str, int] = Field(default={}, description="Next PR number by repo")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Repository, Issue, PullRequest, Branch, Commit, FileContent, GitHubScenario]
 
@@ -84,6 +84,7 @@ class GitHubServer:
         self.current_user: Optional[Dict[str, str]] = None
         self.next_issue_number: Dict[str, int] = {}
         self.next_pr_number: Dict[str, int] = {}
+        self.current_time: str = ""
 
     @staticmethod
     def _normalize_scenario_keys(scenario: dict) -> dict:
@@ -138,6 +139,7 @@ class GitHubServer:
         self.current_user = model.current_user
         self.next_issue_number = model.next_issue_number
         self.next_pr_number = model.next_pr_number
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -151,7 +153,8 @@ class GitHubServer:
             "files": {k: {ik: iv.dict() for ik, iv in v.items()} for k, v in self.files.items()},
             "current_user": self.current_user,
             "next_issue_number": self.next_issue_number,
-            "next_pr_number": self.next_pr_number
+            "next_pr_number": self.next_pr_number,
+            "current_time": self.current_time
         }
 
     def search_repositories(self, q: str, sort: Optional[str] = None, order: Optional[str] = None, per_page: Optional[str] = None, page: Optional[int] = None) -> dict:
@@ -176,7 +179,7 @@ class GitHubServer:
             description=description,
             private=private or False,
             url=f"https://github.com/{repo_key}",
-            created_at=datetime.datetime.now().isoformat()
+            created_at=self.current_time
         )
         self.repositories[repo_key] = repo
         self.issues[repo_key] = {}
@@ -241,7 +244,8 @@ class GitHubServer:
         if repo_key not in self.files:
             self.files[repo_key] = {}
         self.files[repo_key][path] = file_data
-        commit_sha = f"create_{path.replace('/', '_')}_{datetime.datetime.now().timestamp()}"
+        timestamp_str = self.current_time.replace(":", "").replace("-", "").replace("T", "_")[:15]
+        commit_sha = f"create_{path.replace('/', '_')}_{timestamp_str}"
         return {
             "commit_sha": commit_sha,
             "file_sha": f"file_{path.replace('/', '_')}",
@@ -253,7 +257,8 @@ class GitHubServer:
         repo_key = f"{owner}/{repo}"
         if repo_key in self.files and path in self.files[repo_key]:
             del self.files[repo_key][path]
-        commit_sha = f"delete_{path.replace('/', '_')}_{datetime.datetime.now().timestamp()}"
+        timestamp_str = self.current_time.replace(":", "").replace("-", "").replace("T", "_")[:15]
+        commit_sha = f"delete_{path.replace('/', '_')}_{timestamp_str}"
         return {
             "commit_sha": commit_sha,
             "path": path,
@@ -275,7 +280,8 @@ class GitHubServer:
                     encoding="utf-8",
                     size=len(content.encode('utf-8'))
                 )
-        commit_sha = f"push_{len(files)}_{datetime.datetime.now().timestamp()}"
+        timestamp_str = self.current_time.replace(":", "").replace("-", "").replace("T", "_")[:15]
+        commit_sha = f"push_{len(files)}_{timestamp_str}"
         return {
             "commit_sha": commit_sha,
             "files_changed": len(files),
@@ -291,7 +297,7 @@ class GitHubServer:
             title=title,
             body=body,
             state="open",
-            created_at=datetime.datetime.now().isoformat()
+            created_at=self.current_time
         )
         if repo_key not in self.issues:
             self.issues[repo_key] = {}
@@ -315,7 +321,7 @@ class GitHubServer:
             state="open",
             head=head,
             base=base,
-            created_at=datetime.datetime.now().isoformat()
+            created_at=self.current_time
         )
         if repo_key not in self.pull_requests:
             self.pull_requests[repo_key] = {}
@@ -341,7 +347,7 @@ class GitHubServer:
                 description=original.description,
                 private=False,
                 url=f"https://github.com/{fork_key}",
-                created_at=datetime.datetime.now().isoformat()
+                created_at=self.current_time
             )
             self.repositories[fork_key] = fork_repo
             self.issues[fork_key] = {}
@@ -355,7 +361,7 @@ class GitHubServer:
             "owner": fork_owner,
             "repo": repo,
             "forked_from": repo_key,
-            "created_at": datetime.datetime.now().isoformat()
+            "created_at": self.current_time
         }
 
     def create_branch(self, owner: str, repo: str, branch: str, from_branch: Optional[str] = None) -> dict:
@@ -363,12 +369,12 @@ class GitHubServer:
         repo_key = f"{owner}/{repo}"
         new_branch = Branch(
             name=branch,
-            sha=f"branch_{branch}_{datetime.datetime.now().timestamp()}"
+            sha=f"branch_{branch}_{self.current_time.replace(':', '').replace('-', '').replace('T', '_')[:15]}"
         )
         if repo_key not in self.branches:
             self.branches[repo_key] = {}
         self.branches[repo_key][branch] = new_branch
-        created_at = datetime.datetime.now().isoformat()
+        created_at = self.current_time
         return {
             "branch": branch,
             "sha": new_branch.sha,
@@ -430,8 +436,8 @@ class GitHubServer:
             if state:
                 issue.state = state
                 if state == "closed":
-                    issue.closed_at = datetime.datetime.now().isoformat()
-            issue.updated_at = datetime.datetime.now().isoformat()
+                    issue.closed_at = self.current_time
+            issue.updated_at = self.current_time
             return {
                 "issue_number": issue_number,
                 "title": issue.title,
@@ -445,7 +451,7 @@ class GitHubServer:
         return {
             "comment_id": hash(f"{owner}/{repo}/{issue_number}/{body}") % 1000000,
             "issue_number": issue_number,
-            "created_at": datetime.datetime.now().isoformat()
+            "created_at": self.current_time
         }
 
     def close_issue(self, owner: str, repo: str, issue_number: int) -> dict:
@@ -454,14 +460,14 @@ class GitHubServer:
         if repo_key in self.issues and issue_number in self.issues[repo_key]:
             issue = self.issues[repo_key][issue_number]
             issue.state = "closed"
-            issue.closed_at = datetime.datetime.now().isoformat()
+            issue.closed_at = self.current_time
             return {
                 "issue_number": issue_number,
                 "title": issue.title,
                 "state": issue.state,
                 "closed_at": issue.closed_at
             }
-        return {"issue_number": issue_number, "title": "", "state": "closed", "closed_at": datetime.datetime.now().isoformat()}
+        return {"issue_number": issue_number, "title": "", "state": "closed", "closed_at": self.current_time}
 
     def search_code(self, q: str, sort: Optional[str] = None, order: Optional[str] = None, per_page: Optional[str] = None, page: Optional[int] = None) -> dict:
         """Search for code in GitHub repositories."""
@@ -554,7 +560,7 @@ class GitHubServer:
             "review_id": hash(f"{owner}/{repo}/{pull_number}/{body}") % 1000000,
             "pull_number": pull_number,
             "state": event,
-            "submitted_at": datetime.datetime.now().isoformat()
+            "submitted_at": self.current_time
         }
 
     def merge_pull_request(self, owner: str, repo: str, pull_number: int, commit_title: Optional[str] = None, commit_message: Optional[str] = None, merge_method: Optional[str] = None) -> dict:
@@ -564,7 +570,8 @@ class GitHubServer:
             pr = self.pull_requests[repo_key][pull_number]
             pr.state = "merged"
             pr.merged = True
-            pr.merge_commit_sha = f"merge_{pull_number}_{datetime.datetime.now().timestamp()}"
+            timestamp_str = self.current_time.replace(":", "").replace("-", "").replace("T", "_")[:15]
+            pr.merge_commit_sha = f"merge_{pull_number}_{timestamp_str}"
             return {
                 "pull_number": pull_number,
                 "merged": True,

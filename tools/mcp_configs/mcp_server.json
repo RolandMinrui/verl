@@ -128,10 +128,6 @@
             "tool_path": "tools/mcp_tools/MovieRecommender.py",
             "stateless": false
         },
-        "MusicAnalysis": {
-            "tool_path": "tools/mcp_tools/MusicAnalysis.py",
-            "stateless": false
-        },
         "Notion": {
             "tool_path": "tools/mcp_tools/Notion.py",
             "stateless": false

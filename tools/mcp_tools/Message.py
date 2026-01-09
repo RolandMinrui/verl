@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 
 # Section 1: Schema
@@ -31,6 +30,7 @@ class MessageScenario(BaseModel):
     current_user_id: Optional[str] = Field(default=None, description="Currently logged-in user ID")
     next_message_id: int = Field(default=1, ge=1, description="Next available message ID")
     next_user_id_counter: int = Field(default=6, ge=1, description="Counter for generating user IDs")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [User, Message, MessageScenario]
 
@@ -42,6 +42,7 @@ class MessageAPI:
         self.current_user_id: Optional[str] = None
         self.next_message_id: int = 1
         self.next_user_id_counter: int = 1
+        self.current_time: str = ""
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -51,15 +52,17 @@ class MessageAPI:
         self.current_user_id = model.current_user_id
         self.next_message_id = model.next_message_id
         self.next_user_id_counter = model.next_user_id_counter
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
         return {
-            "users": {uid: user.dict() for uid, user in self.users.items()},
-            "messages": {mid: msg.dict() for mid, msg in self.messages.items()},
+            "users": {uid: user.model_dump() if hasattr(user, 'model_dump') else user for uid, user in self.users.items()},
+            "messages": {mid: msg.model_dump() if hasattr(msg, 'model_dump') else msg for mid, msg in self.messages.items()},
             "current_user_id": self.current_user_id,
             "next_message_id": self.next_message_id,
-            "next_user_id_counter": self.next_user_id_counter
+            "next_user_id_counter": self.next_user_id_counter,
+            "current_time": self.current_time
         }
     
     def login(self, user_id: str) -> dict:
@@ -126,7 +129,7 @@ class MessageAPI:
         message_id = self.next_message_id
         self.next_message_id += 1
         
-        sent_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sent_at = self.current_time.replace("T", " ")[:19]
         
         new_message = Message(
             message_id=message_id,

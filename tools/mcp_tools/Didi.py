@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
 import random
 import time
-from datetime import datetime
 
 # Section 1: Schema
 class Location(BaseModel):
@@ -114,6 +113,7 @@ class DidiScenario(BaseModel):
         "bicycling_39.9042,116.4074_39.9142,116.3974": RouteInfo(distance=1900, duration=600, route=[{"lat": 39.9042, "lng": 116.4074}, {"lat": 39.9092, "lng": 116.4024}, {"lat": 39.9142, "lng": 116.3974}])
     }, description="Database of pre-calculated routes")
     random_seed: Optional[int] = Field(default=None, description="Random seed for reproducible results")
+    current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Location, Place, RouteInfo, AddressInfo, TaxiProduct, TaxiEstimate, OrderInfo, DriverLocation, CancelInfo, DeepLink, DidiScenario]
 
@@ -128,6 +128,7 @@ class DidiAPI:
         self.address_database: Dict[str, AddressInfo] = {}
         self.route_database: Dict[str, RouteInfo] = {}
         self.random_seed: Optional[int] = None
+        self.current_time: str = "2024-01-01T00:00:00"
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -139,6 +140,7 @@ class DidiAPI:
         self.address_database = model.address_database
         self.route_database = model.route_database
         self.random_seed = model.random_seed
+        self.current_time = model.current_time
         if self.random_seed is not None:
             random.seed(self.random_seed)
 
@@ -151,7 +153,8 @@ class DidiAPI:
             "places_database": {k: [place.dict() for place in places] for k, places in self.places_database.items()},
             "address_database": {k: v.dict() for k, v in self.address_database.items()},
             "route_database": {k: v.dict() for k, v in self.route_database.items()},
-            "random_seed": self.random_seed
+            "random_seed": self.random_seed,
+            "current_time": self.current_time
         }
 
     def get_current_location(self) -> dict:
@@ -246,8 +249,9 @@ class DidiAPI:
         # Calculate distance
         distance = int(((dest.latitude - origin.latitude)**2 + (dest.longitude - origin.longitude)**2)**0.5 * 111000)
         
-        # Generate estimate trace ID
-        estimate_trace_id = f"EST_{int(time.time())}_{random.randint(1000, 9999)}"
+        # Generate estimate trace ID using current_time
+        time_hash = hash(self.current_time) % 100000
+        estimate_trace_id = f"EST_{time_hash}_{random.randint(1000, 9999)}"
         
         # Create products with different pricing
         products = [
@@ -267,8 +271,9 @@ class DidiAPI:
         if estimate_trace_id not in self.estimates:
             raise ValueError(f"Estimate trace ID {estimate_trace_id} not found")
         
-        # Generate order ID
-        order_id = f"ORDER_{int(time.time())}_{random.randint(1000, 9999)}"
+        # Generate order ID using current_time
+        time_hash = hash(self.current_time) % 100000
+        order_id = f"ORDER_{time_hash}_{random.randint(1000, 9999)}"
         
         # Find selected product
         estimate = self.estimates[estimate_trace_id]
@@ -294,7 +299,7 @@ class DidiAPI:
             "order_id": order_id,
             "status": "pending",
             "estimated_arrival": order.estimated_arrival,
-            "created_at": datetime.now().isoformat()
+            "created_at": self.current_time
         }
 
     def taxi_query_order(self, order_id: Optional[str] = None) -> dict:
@@ -332,7 +337,7 @@ class DidiAPI:
         
         return {
             "order_id": order_id,
-            "cancelled_at": datetime.now().isoformat(),
+            "cancelled_at": self.current_time,
             "refund_status": "processing" if reason != "不需要了" else "refunded"
         }
 
@@ -356,7 +361,7 @@ class DidiAPI:
             "order_id": order_id,
             "driver_lat": str(driver_lat),
             "driver_lng": str(driver_lng),
-            "updated_at": datetime.now().isoformat()
+            "updated_at": self.current_time
         }
 
     def taxi_generate_ride_app_link(self, origin_location: dict, destination_location: dict, product_category: Optional[str] = None) -> dict:

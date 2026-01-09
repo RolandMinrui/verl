@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 import uuid
 
 # Section 1: Schema
@@ -47,6 +46,7 @@ class PostingScenario(BaseModel):
     next_tweet_id: int = Field(default=1, ge=0, description="Next available tweet ID")
     next_comment_id: int = Field(default=1, ge=0, description="Next available comment ID")
     user_stats: Dict[str, Dict[str, int]] = Field(default={}, description="User statistics")
+    current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [User, Tweet, Comment, FollowRelationship, PostingScenario]
 
@@ -62,6 +62,7 @@ class PostingAPI:
         self.next_tweet_id: int = 1
         self.next_comment_id: int = 1
         self.user_stats: Dict[str, Dict[str, int]] = {}
+        self.current_time: str = "2024-01-01T00:00:00"
         
     def _ensure_user_stats(self, username: str) -> None:
         """Ensure user has stats initialized with all required fields."""
@@ -96,6 +97,7 @@ class PostingAPI:
         self.next_tweet_id = model.next_tweet_id
         self.next_comment_id = model.next_comment_id
         self.user_stats = model.user_stats
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -107,7 +109,8 @@ class PostingAPI:
             "current_session": self.current_session,
             "next_tweet_id": self.next_tweet_id,
             "next_comment_id": self.next_comment_id,
-            "user_stats": self.user_stats
+            "user_stats": self.user_stats,
+            "current_time": self.current_time
         }
 
     def login(self, username: str, password: str) -> dict:
@@ -155,7 +158,7 @@ class PostingAPI:
             raise ValueError("User not authenticated")
         
         username = self.current_session["username"]
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+        now = self.current_time
         
         # Validate hashtags and mentions format - allow with or without prefixes
         processed_hashtags = []
@@ -300,7 +303,7 @@ class PostingAPI:
             raise ValueError("Can only update your own tweets")
         
         updated_fields = []
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+        now = self.current_time
         
         if content is not None:
             tweet.content = content
@@ -385,7 +388,7 @@ class PostingAPI:
         self._ensure_user_stats(current_username)
         self.user_stats[current_username]["retweets"] += 1
         
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+        now = self.current_time
         
         return {
             "success": True,
@@ -402,7 +405,7 @@ class PostingAPI:
             raise ValueError(f"Tweet {tweet_id} not found")
         
         username = self.current_session["username"]
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+        now = self.current_time
         
         comment = Comment(
             comment_id=self.next_comment_id,
@@ -474,7 +477,7 @@ class PostingAPI:
         if current_username == username:
             raise ValueError("Cannot follow yourself")
         
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
+        now = self.current_time
         
         follow_rel = FollowRelationship(
             follower=current_username,

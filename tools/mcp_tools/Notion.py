@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-from datetime import datetime
 import uuid
 
 # Section 1: Schema
@@ -65,6 +64,7 @@ class NotionScenario(BaseModel):
     pageChildren: Dict[str, List[str]] = Field(default={}, description="Mapping of page ID to child block IDs")
     databaseItems: Dict[str, List[str]] = Field(default={}, description="Mapping of database ID to page IDs")
     commentThreads: Dict[str, List[str]] = Field(default={}, description="Mapping of parent ID to comment IDs")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Block, Page, Database, User, Comment, NotionScenario]
 
@@ -81,6 +81,7 @@ class NotionAPI:
         self.pageChildren: Dict[str, List[str]] = {}
         self.databaseItems: Dict[str, List[str]] = {}
         self.commentThreads: Dict[str, List[str]] = {}
+        self.current_time: str = ""
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -94,6 +95,7 @@ class NotionAPI:
         self.pageChildren = model.pageChildren
         self.databaseItems = model.databaseItems
         self.commentThreads = model.commentThreads
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -106,12 +108,13 @@ class NotionAPI:
             "blockChildren": self.blockChildren,
             "pageChildren": self.pageChildren,
             "databaseItems": self.databaseItems,
-            "commentThreads": self.commentThreads
+            "commentThreads": self.commentThreads,
+            "current_time": self.current_time
         }
 
     def _generate_timestamp(self) -> str:
         """Generate ISO 8601 timestamp."""
-        return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        return self.current_time
 
     def _generate_id(self) -> str:
         """Generate unique ID."""

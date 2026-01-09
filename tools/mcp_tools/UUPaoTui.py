@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List
 from mcp.server.fastmcp import FastMCP
 import uuid
-import time
 
 # Section 1: Schema
 class PriceEstimate(BaseModel):
@@ -44,6 +43,7 @@ class UUPaoTuiScenario(BaseModel):
     orderStates: List[str] = Field(default=[
         "待接单", "配送中", "已完成", "已取消", "异常订单"
     ], description="Possible order states")
+    current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [PriceEstimate, Order, CancelResult, UUPaoTuiScenario]
 
@@ -56,6 +56,7 @@ class UUPaoTuiAPI:
         self.baseRatesMap: Dict[str, float] = {}
         self.cityMultipliersMap: Dict[str, float] = {}
         self.orderStates: List[str] = []
+        self.current_time: str = "2024-01-01T00:00:00"
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -65,6 +66,7 @@ class UUPaoTuiAPI:
         self.baseRatesMap = model.baseRatesMap
         self.cityMultipliersMap = model.cityMultipliersMap
         self.orderStates = model.orderStates
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -73,7 +75,8 @@ class UUPaoTuiAPI:
             "priceTokens": self.priceTokens,
             "baseRatesMap": self.baseRatesMap,
             "cityMultipliersMap": self.cityMultipliersMap,
-            "orderStates": self.orderStates
+            "orderStates": self.orderStates,
+            "current_time": self.current_time
         }
 
     def _calculate_distance(self, from_addr: str, to_addr: str) -> float:
@@ -105,7 +108,7 @@ class UUPaoTuiAPI:
             "sendType": sendType,
             "distance": distance,
             "needPayMoney": total_fee,
-            "timestamp": time.time()
+            "timestamp": self.current_time
         }
         
         return {"priceToken": price_token, "needPayMoney": total_fee}
@@ -116,14 +119,16 @@ class UUPaoTuiAPI:
             raise ValueError("Invalid or expired price token")
         
         token_info = self.priceTokens[priceToken]
-        order_code = f"UU{int(time.time())}{hash(priceToken) % 10000:04d}"
+        # Generate order code using current_time
+        time_hash = hash(self.current_time) % 100000
+        order_code = f"UU{time_hash}{hash(priceToken) % 10000:04d}"
         
         order = Order(
             orderCode=order_code,
             fromAddress=token_info["fromAddress"],
             toAddress=token_info["toAddress"],
             state=self.orderStates[0],  # 待接单
-            createdAt=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
+            createdAt=self.current_time,
             receiverPhone=receiverPhone,
             senderPhone=senderPhone,
             distance=token_info["distance"],

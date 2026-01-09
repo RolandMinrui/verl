@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 from copy import deepcopy
 
 # Section 1: Schema
@@ -26,27 +25,29 @@ class GorillaFileSystemScenario(BaseModel):
         description="Root directory structure with nested files and directories. Format: {\"root\": {\"type\": \"directory\", \"contents\": {\"filename\": {\"type\": \"file\", \"content\": \"...\"}, \"dirname\": {\"type\": \"directory\", \"contents\": {...}}}}}"
     )
     current_dir: str = Field(default="/", description="Current working directory path, e.g., \"/\" or \"/home/user\"")
+    current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [GorillaFileSystemScenario]
 
 # Section 2: Class
 class File:
     """Internal file representation."""
-    def __init__(self, name: str, content: str = "") -> None:
+    def __init__(self, name: str, content: str = "", current_time: Optional[str] = None) -> None:
         self.name: str = name
         self.content: str = content
-        self._last_modified: datetime.datetime = datetime.datetime.now()
+        # Store as string to match scenario format
+        self._last_modified: str = current_time or "2024-01-01T00:00:00"
 
-    def _write(self, new_content: str) -> None:
+    def _write(self, new_content: str, current_time: Optional[str] = None) -> None:
         self.content = new_content
-        self._last_modified = datetime.datetime.now()
+        self._last_modified = current_time or "2024-01-01T00:00:00"
 
     def _read(self) -> str:
         return self.content
 
-    def _append(self, additional_content: str) -> None:
+    def _append(self, additional_content: str, current_time: Optional[str] = None) -> None:
         self.content += additional_content
-        self._last_modified = datetime.datetime.now()
+        self._last_modified = current_time or "2024-01-01T00:00:00"
 
     def __repr__(self):
         return f"<<File: {self.name}, Content: {self.content}>>"
@@ -64,10 +65,10 @@ class Directory:
         self.parent: Optional["Directory"] = parent
         self.contents: Dict[str, Union["File", "Directory"]] = {}
 
-    def _add_file(self, file_name: str, content: str = "") -> None:
+    def _add_file(self, file_name: str, content: str = "", current_time: Optional[str] = None) -> None:
         if file_name in self.contents:
             raise ValueError(f"File '{file_name}' already exists in directory '{self.name}'.")
-        new_file = File(file_name, content)
+        new_file = File(file_name, content, current_time)
         self.contents[file_name] = new_file
 
     def _add_directory(self, dir_name: str) -> None:
@@ -98,10 +99,14 @@ class GorillaFileSystemAPI:
         """Initialize Gorilla file system API with empty state."""
         self.root: Directory = Directory("/", None)
         self._current_dir: Directory = self.root
+        self.current_time: str = "2024-01-01T00:00:00"
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the file system instance."""
         model = GorillaFileSystemScenario(**scenario)
+        
+        # Set current time
+        self.current_time = model.current_time
         
         # Initialize root directory
         DEFAULT_STATE = {"root": Directory("/", None)}
@@ -112,7 +117,7 @@ class GorillaFileSystemAPI:
         if model.root:
             root_name = list(model.root.keys())[0] if model.root else "/"
             root_dir = Directory(root_name, None)
-            self.root = self._load_directory(model.root[root_name].get("contents", {}), root_dir)
+            self.root = self._load_directory(model.root[root_name].get("contents", {}), root_dir, self.current_time)
         
         # Set current directory
         self._current_dir = self.root
@@ -148,20 +153,21 @@ class GorillaFileSystemAPI:
                     "contents": serialize_directory(root_dir),
                 }
             },
-            "current_dir": self.pwd()["current_working_directory"]
+            "current_dir": self.pwd()["current_working_directory"],
+            "current_time": self.current_time
         }
         return scenario
 
-    def _load_directory(self, current: dict, parent: Optional[Directory] = None) -> Directory:
+    def _load_directory(self, current: dict, parent: Optional[Directory] = None, current_time: Optional[str] = None) -> Directory:
         """Load a directory and its contents from a dictionary."""
         for dir_name, dir_data in current.items():
             if dir_data["type"] == "directory":
                 new_dir = Directory(dir_name, parent)
-                new_dir = self._load_directory(dir_data.get("contents", {}), new_dir)
+                new_dir = self._load_directory(dir_data.get("contents", {}), new_dir, current_time)
                 parent.contents[dir_name] = new_dir
             elif dir_data["type"] == "file":
                 content = dir_data.get("content", "")
-                new_file = File(dir_name, content)
+                new_file = File(dir_name, content, current_time)
                 parent.contents[dir_name] = new_file
         return parent
 
@@ -219,7 +225,7 @@ class GorillaFileSystemAPI:
             return {"error": f"touch: cannot touch '{file_name}': Invalid character"}
         if file_name in self._current_dir.contents:
             return {"error": f"touch: cannot touch '{file_name}': File exists"}
-        self._current_dir._add_file(file_name)
+        self._current_dir._add_file(file_name, current_time=self.current_time)
         return None
 
     def echo(self, content: str, file_name: Optional[str] = None) -> Union[dict, None]:
@@ -230,9 +236,9 @@ class GorillaFileSystemAPI:
             return {"error": f"echo: cannot touch '{file_name}': Invalid character"}
         if file_name:
             if file_name in self._current_dir.contents:
-                self._current_dir._get_item(file_name)._write(content)
+                self._current_dir._get_item(file_name)._write(content, self.current_time)
             else:
-                self._current_dir._add_file(file_name, content)
+                self._current_dir._add_file(file_name, content, self.current_time)
         return None
 
     def cat(self, file_name: str) -> dict:
@@ -375,7 +381,7 @@ class GorillaFileSystemAPI:
                     return {"error": f"mv: cannot move '{source}' to '{destination}/{source}': File exists"}
                 self._current_dir.contents.pop(source)
                 if isinstance(item, File):
-                    dest_item._add_file(source, item.content)
+                    dest_item._add_file(source, item.content, self.current_time)
                 else:
                     dest_item._add_directory(source)
                     dest_item.contents[source].contents = item.contents
@@ -385,7 +391,7 @@ class GorillaFileSystemAPI:
         else:
             self._current_dir.contents.pop(source)
             if isinstance(item, File):
-                self._current_dir._add_file(destination, item.content)
+                self._current_dir._add_file(destination, item.content, self.current_time)
             else:
                 self._current_dir._add_directory(destination)
                 self._current_dir.contents[destination].contents = item.contents
@@ -434,7 +440,7 @@ class GorillaFileSystemAPI:
                 if source in dest_item.contents:
                     return {"error": f"cp: cannot copy '{source}' to '{destination}/{source}': File exists"}
                 if isinstance(item, File):
-                    dest_item._add_file(source, item.content)
+                    dest_item._add_file(source, item.content, self.current_time)
                 else:
                     dest_item._add_directory(source)
                     dest_item.contents[source].contents = item.contents.copy()
@@ -443,7 +449,7 @@ class GorillaFileSystemAPI:
                 return {"error": f"cp: cannot copy '{source}' to '{destination}': Not a directory"}
         else:
             if isinstance(item, File):
-                self._current_dir._add_file(destination, item.content)
+                self._current_dir._add_file(destination, item.content, self.current_time)
             else:
                 self._current_dir._add_directory(destination)
                 self._current_dir.contents[destination].contents = item.contents.copy()

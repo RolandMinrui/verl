@@ -43,6 +43,7 @@ class TicketManagementScenario(BaseModel):
     next_ticket_id: int = Field(default=1, ge=1, description="Next ticket ID")
     next_comment_id: int = Field(default=1, ge=1, description="Next comment ID")
     staffUsers: List[str] = Field(default=["admin", "support1", "support2", "support3", "manager"], description="Staff usernames")
+    current_time: str = Field(default="2024-01-01 00:00:00", pattern=r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", description="Current timestamp in YYYY-MM-DD HH:mm:ss format")
 
 Scenario_Schema = [User, Ticket, Comment, TicketManagementScenario]
 
@@ -57,6 +58,7 @@ class TicketManagementSystem:
         self.next_ticket_id: int = 1
         self.next_comment_id: int = 1
         self.staffUsers: List[str] = []
+        self.current_time: str = "2024-01-01 00:00:00"
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the system."""
@@ -68,6 +70,7 @@ class TicketManagementSystem:
         self.next_ticket_id = model.next_ticket_id
         self.next_comment_id = model.next_comment_id
         self.staffUsers = model.staffUsers
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -78,12 +81,13 @@ class TicketManagementSystem:
             "sessions": self.sessions,
             "next_ticket_id": self.next_ticket_id,
             "next_comment_id": self.next_comment_id,
-            "staffUsers": self.staffUsers
+            "staffUsers": self.staffUsers,
+            "current_time": self.current_time
         }
 
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in YYYY-MM-DD HH:MM:SS format."""
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return self.current_time
 
     def _is_authenticated(self, session_token: str) -> Optional[str]:
         """Check if session token is valid and return username."""
@@ -101,7 +105,9 @@ class TicketManagementSystem:
         if user.password != password:
             return {"success": False, "session_token": "", "username": ""}
         
-        session_token = f"session_{username}_{int(time.time())}"
+        # Generate session token using current_time
+        time_hash = hash(self.current_time) % 100000
+        session_token = f"session_{username}_{time_hash}"
         self.sessions[username] = session_token
         return {"success": True, "session_token": session_token, "username": username}
 

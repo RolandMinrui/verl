@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 
 # Section 1: Schema
 class User(BaseModel):
@@ -82,6 +81,7 @@ class TradingScenario(BaseModel):
     watchlists: Dict[str, List[str]] = Field(default={}, description="User watchlists")
     next_order_id: int = Field(default=1, description="Next order ID")
     next_transaction_id: int = Field(default=1, description="Next transaction ID")
+    current_time: str = Field(default="2024-01-01 00:00:00", pattern=r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", description="Current timestamp in YYYY-MM-DD HH:mm:ss format")
 
 Scenario_Schema = [User, Account, Stock, Order, Transaction, TradingScenario]
 
@@ -103,6 +103,7 @@ class TradingBot:
         self.watchlists: Dict[str, List[str]] = {}
         self.next_order_id: int = 1
         self.next_transaction_id: int = 1
+        self.current_time: str = "2024-01-01 00:00:00"
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the trading bot."""
@@ -121,6 +122,7 @@ class TradingBot:
         self.watchlists = model.watchlists
         self.next_order_id = model.next_order_id
         self.next_transaction_id = model.next_transaction_id
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -138,14 +140,17 @@ class TradingBot:
             "transactions": [transaction.dict() for transaction in self.transactions],
             "watchlists": self.watchlists,
             "next_order_id": self.next_order_id,
-            "next_transaction_id": self.next_transaction_id
+            "next_transaction_id": self.next_transaction_id,
+            "current_time": self.current_time
         }
 
     def login(self, username: str, password: str) -> dict:
         """Authenticate user and establish trading session."""
         if username in self.users and self.users[username].password == password:
             self.current_user = username
-            self.session_token = f"token_{username}_{int(datetime.datetime.now().timestamp())}"
+            # Generate session token using current_time
+            time_hash = hash(self.current_time) % 100000
+            self.session_token = f"token_{username}_{time_hash}"
             return {"status": "success", "session_token": self.session_token}
         return {"status": "failed"}
 
@@ -200,17 +205,16 @@ class TradingBot:
         else:
             account.balance -= amount
         
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         transaction = Transaction(
             transaction_id=f"TXN{self.next_transaction_id:06d}",
             type=transaction_type,
             amount=amount,
-            timestamp=timestamp
+            timestamp=self.current_time
         )
         self.transactions.append(transaction)
         self.next_transaction_id += 1
         
-        return {"status": "success", "new_balance": account.balance, "timestamp": timestamp}
+        return {"status": "success", "new_balance": account.balance, "timestamp": self.current_time}
 
     def get_transaction_history(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         """Get transaction history with optional date filtering."""
@@ -273,7 +277,6 @@ class TradingBot:
         if order_type == "Buy" and account.balance < price * quantity:
             return {}
         
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         order = Order(
             order_id=self.next_order_id,
             order_type=order_type,
@@ -281,7 +284,7 @@ class TradingBot:
             price=price,
             quantity=quantity,
             status="Pending",
-            timestamp=timestamp
+            timestamp=self.current_time
         )
         
         self.orders[self.next_order_id] = order

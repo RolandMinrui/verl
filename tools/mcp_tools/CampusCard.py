@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 import datetime
 
@@ -31,6 +31,7 @@ class CampusCardScenario(BaseModel):
     statusTextMap: Dict[int, str] = Field(default={
         1: "normal", 2: "lost", 3: "system frozen", 4: "closed", 5: "pre-closed", 6: "manually frozen"
     }, description="Mapping of status codes to human-readable descriptions")
+    current_time: str = Field(default="2024-01-01 00:00:00", pattern=r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", description="Current timestamp in YYYY-MM-DD HH:mm:ss format")
 
 Scenario_Schema = [Transaction, UserAccount, CampusCardScenario]
 
@@ -41,6 +42,7 @@ class CampusCardAPI:
         self.accounts: Dict[str, UserAccount] = {}
         self.transactions: Dict[str, List[Transaction]] = {}
         self.statusTextMap: Dict[int, str] = {}
+        self.current_time: str = "2024-01-01 00:00:00"
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -53,13 +55,15 @@ class CampusCardAPI:
         self.accounts = model.accounts
         self.transactions = model.transactions
         self.statusTextMap = model.statusTextMap
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
         return {
             "accounts": {user_id: account.dict() for user_id, account in self.accounts.items()},
             "transactions": {user_id: [txn.dict() for txn in txns] for user_id, txns in self.transactions.items()},
-            "statusTextMap": self.statusTextMap
+            "statusTextMap": self.statusTextMap,
+            "current_time": self.current_time
         }
 
     def query_balance(self, userId: str) -> dict:
@@ -105,14 +109,15 @@ class CampusCardAPI:
         """Add funds to a campus card using a supported payment method."""
         account = self.accounts[userId]
         
-        # Create transaction
-        trade_id = f"RECHARGE_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{userId}"
+        # Create transaction using current_time
+        time_str = self.current_time.replace("-", "").replace(" ", "").replace(":", "")
+        trade_id = f"RECHARGE_{time_str}_{userId}"
         new_balance = account.balance + amount
         
         transaction = Transaction(
             tradeId=trade_id,
             merchantName="Campus Card Recharge",
-            date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            date=self.current_time,
             amount=amount,
             balanceAfter=new_balance
         )

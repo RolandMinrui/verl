@@ -55,6 +55,7 @@ class Kuaidi100Scenario(BaseModel):
         "4-1": 1800, "4-2": 1400, "4-3": 1000, "4-4": 700, "4-5": 1200,
         "5-1": 2500, "5-2": 2000, "5-3": 1600, "5-4": 1200, "5-5": 800
     }, description="Zone distances in kilometers")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [TrackingEvent, TrackingData, DeliveryEstimate, PriceEstimate, Kuaidi100Scenario]
 
@@ -68,6 +69,7 @@ class Kuaidi100API:
         self.zone_multipliers: Dict[str, float] = {}
         self.service_speeds: Dict[str, int] = {}
         self.zone_distances: Dict[str, int] = {}
+        self.current_time: str = ""
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -78,6 +80,7 @@ class Kuaidi100API:
         self.zone_multipliers = model.zone_multipliers
         self.service_speeds = model.service_speeds
         self.zone_distances = model.zone_distances
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -87,7 +90,8 @@ class Kuaidi100API:
             "base_rates": self.base_rates,
             "zone_multipliers": self.zone_multipliers,
             "service_speeds": self.service_speeds,
-            "zone_distances": self.zone_distances
+            "zone_distances": self.zone_distances,
+            "current_time": self.current_time
         }
 
     def _extract_zone(self, address: str) -> int:
@@ -134,7 +138,7 @@ class Kuaidi100API:
         if order_time:
             base_time = datetime.strptime(order_time, "%Y-%m-%d %H:%M:%S")
         else:
-            base_time = datetime.now()
+            base_time = datetime.strptime(self.current_time.replace("T", " ")[:19], "%Y-%m-%d %H:%M:%S")
         
         arrival_time = base_time + timedelta(hours=total_hours)
         

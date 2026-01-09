@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 
 # Section 1: Schema
@@ -48,9 +48,9 @@ class MetaDeck(BaseModel):
     win_rate: float = Field(..., ge=0, le=100, description="Win rate percentage achieved")
     play_rate: float = Field(..., ge=0, le=100, description="Percentage of games deck is played")
 
-class TFTScenario(BaseModel):
-    """Main scenario model for TFT game data."""
-    championBuildsMap: Dict[str, ChampionBuild] = Field(default_factory=lambda: {
+def _get_default_champion_builds() -> Dict[str, ChampionBuild]:
+    """Generate default champion builds data."""
+    return {
         "Jinx": ChampionBuild(
             champion_name="Jinx",
             items=[
@@ -91,9 +91,11 @@ class TFTScenario(BaseModel):
                 ItemBuild(item_name="Giant Slayer", priority=3, win_rate=68.2)
             ]
         )
-    }, description="Champion item builds mapping")
-    
-    playStylesMap: Dict[str, PlayStyle] = Field(default_factory=lambda: {
+    }
+
+def _get_default_play_styles() -> Dict[str, PlayStyle]:
+    """Generate default play styles data."""
+    return {
         "aggro": PlayStyle(
             style="aggro",
             description="Aggressive early game strategy focused on winning streaks and maintaining board strength",
@@ -134,9 +136,11 @@ class TFTScenario(BaseModel):
                 "Use strong mid-game units to preserve health"
             ]
         )
-    }, description="Play style recommendations mapping")
-    
-    augmentsList: List[Augment] = Field(default_factory=lambda: [
+    }
+
+def _get_default_augments() -> List[Augment]:
+    """Generate default augments data."""
+    return [
         Augment(name="Cybernetic Implants", tier="Silver", description="Your units with items gain 200 HP and 20% attack damage", win_rate=58.5),
         Augment(name="Titanic Strength", tier="Silver", description="Your units gain 15% of their maximum HP as attack damage", win_rate=59.2),
         Augment(name="Binary Airdrop", tier="Gold", description="Your champions equipped with exactly 2 items gain a random completed item", win_rate=63.7),
@@ -147,9 +151,11 @@ class TFTScenario(BaseModel):
         Augment(name="Thrill of the Hunt", tier="Silver", description="Your units heal 400 HP on kill", win_rate=60.1),
         Augment(name="Portable Forge", tier="Gold", description="Gain an Ornn item component and 7 gold", win_rate=64.5),
         Augment(name="Sunfire Board", tier="Gold", description="At start of combat, enemies take true damage for 10 seconds", win_rate=61.9)
-    ], description="List of available augments")
-    
-    itemChampionSynergiesMap: Dict[str, List[ChampionItemSynergy]] = Field(default_factory=lambda: {
+    ]
+
+def _get_default_item_synergies() -> Dict[str, List[ChampionItemSynergy]]:
+    """Generate default item champion synergies data."""
+    return {
         "Infinity Edge": [
             ChampionItemSynergy(champion_name="Jhin", synergy_score=9.5, win_rate=71.3),
             ChampionItemSynergy(champion_name="Jinx", synergy_score=8.8, win_rate=67.5),
@@ -171,9 +177,11 @@ class TFTScenario(BaseModel):
             ChampionItemSynergy(champion_name="Tryndamere", synergy_score=8.1, win_rate=64.2),
             ChampionItemSynergy(champion_name="Riven", synergy_score=7.8, win_rate=62.9)
         ]
-    }, description="Item champion synergies mapping")
-    
-    itemCombinationsList: List[ItemCombination] = Field(default_factory=lambda: [
+    }
+
+def _get_default_item_combinations() -> List[ItemCombination]:
+    """Generate default item combinations data."""
+    return [
         ItemCombination(item1="B.F. Sword", item2="B.F. Sword", result="Infinity Edge", description="Grants 75% critical strike chance and 10% critical strike damage"),
         ItemCombination(item1="Tear of the Goddess", item2="Tear of the Goddess", result="Blue Buff", description="After casting, set mana to 20. Gain 30 mana on takedown"),
         ItemCombination(item1="B.F. Sword", item2="Negatron Cloak", result="Bloodthirster", description="Grant 40% omnivamp. Once per combat at 40% HP, gain 25% max HP shield"),
@@ -184,9 +192,11 @@ class TFTScenario(BaseModel):
         ItemCombination(item1="Chain Vest", item2="Chain Vest", result="Bramble Vest", description="Neglect 50% bonus damage from all critical strikes. When struck, deal magic damage"),
         ItemCombination(item1="Negatron Cloak", item2="Negatron Cloak", result="Dragon's Claw", description="Grant 30 bonus magic resist. Reduce incoming magic damage by 30%"),
         ItemCombination(item1="Needlessly Large Rod", item2="Needlessly Large Rod", result="Rabadon's Deathcap", description="Grant 75 bonus ability power")
-    ], description="List of item combination recipes")
-    
-    metaDecksList: List[MetaDeck] = Field(default_factory=lambda: [
+    ]
+
+def _get_default_meta_decks() -> List[MetaDeck]:
+    """Generate default meta decks data."""
+    return [
         MetaDeck(
             name="Syphoners",
             champions=["Nasus", "Renekton", "Rakan", "Xayah", "Zeri", "Sivir", "Aatrox", "Kayle"],
@@ -222,7 +232,34 @@ class TFTScenario(BaseModel):
             win_rate=16.7,
             play_rate=10.8
         )
-    ], description="List of current meta decks")
+    ]
+
+class TFTScenario(BaseModel):
+    """Main scenario model for TFT game data."""
+    championBuildsMap: Dict[str, ChampionBuild] = Field(
+        default_factory=_get_default_champion_builds,
+        description="Champion item builds mapping"
+    )
+    playStylesMap: Dict[str, PlayStyle] = Field(
+        default_factory=_get_default_play_styles,
+        description="Play style recommendations mapping"
+    )
+    augmentsList: List[Augment] = Field(
+        default_factory=_get_default_augments,
+        description="List of available augments"
+    )
+    itemChampionSynergiesMap: Dict[str, List[ChampionItemSynergy]] = Field(
+        default_factory=_get_default_item_synergies,
+        description="Item champion synergies mapping"
+    )
+    itemCombinationsList: List[ItemCombination] = Field(
+        default_factory=_get_default_item_combinations,
+        description="List of item combination recipes"
+    )
+    metaDecksList: List[MetaDeck] = Field(
+        default_factory=_get_default_meta_decks,
+        description="List of current meta decks"
+    )
 
 Scenario_Schema = [ItemBuild, ChampionBuild, PlayStyle, Augment, ChampionItemSynergy, ItemCombination, MetaDeck, TFTScenario]
 

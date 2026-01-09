@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
-import datetime
 
 # Section 1: Schema
 class Spreadsheet(BaseModel):
@@ -26,6 +25,7 @@ class GoogleSheetsScenario(BaseModel):
     sheet_data: Dict[str, Dict[str, List[List[Any]]]] = Field(default={}, description="Cell data for each sheet indexed by spreadsheet ID and sheet name")
     created_times: Dict[str, str] = Field(default={}, description="Creation timestamps for spreadsheets")
     modified_times: Dict[str, str] = Field(default={}, description="Last modified timestamps for spreadsheets")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Spreadsheet, Sheet, CellRange, GoogleSheetsScenario]
 
@@ -38,6 +38,7 @@ class GoogleSheetsAPI:
         self.sheet_data: Dict[str, Dict[str, List[List[Any]]]] = {}
         self.created_times: Dict[str, str] = {}
         self.modified_times: Dict[str, str] = {}
+        self.current_time: str = ""
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
@@ -47,6 +48,7 @@ class GoogleSheetsAPI:
         self.sheet_data = model.sheet_data
         self.created_times = model.created_times
         self.modified_times = model.modified_times
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -55,7 +57,8 @@ class GoogleSheetsAPI:
             "sheets": {k: [sheet.dict() for sheet in sheets] for k, sheets in self.sheets.items()},
             "sheet_data": self.sheet_data,
             "created_times": self.created_times,
-            "modified_times": self.modified_times
+            "modified_times": self.modified_times,
+            "current_time": self.current_time
         }
 
     def list_spreadsheets(self) -> dict:
@@ -125,7 +128,7 @@ class GoogleSheetsAPI:
         self.sheets[spreadsheet_id] = []
         self.sheet_data[spreadsheet_id] = {}
         
-        now = datetime.datetime.now().isoformat()
+        now = self.current_time
         self.created_times[spreadsheet_id] = now
         self.modified_times[spreadsheet_id] = now
         
@@ -152,7 +155,7 @@ class GoogleSheetsAPI:
             self.sheet_data[spreadsheet_id] = {}
         self.sheet_data[spreadsheet_id][title] = []
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "sheet_id": sheet_id,
@@ -184,7 +187,7 @@ class GoogleSheetsAPI:
                 total_updated += sum(len(row) for row in rng_data)
                 break  # Only handle first range for simplicity
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "updated_ranges": updated_ranges,
@@ -204,7 +207,7 @@ class GoogleSheetsAPI:
         new_rows = [[] for _ in range(count)]
         current_data.extend(new_rows)
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "added_rows": count,
@@ -224,7 +227,7 @@ class GoogleSheetsAPI:
         for row in current_data:
             row.extend([None] * count)
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "added_columns": count,
@@ -246,7 +249,7 @@ class GoogleSheetsAPI:
         
         del current_data[start_index:start_index + count]
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "deleted_rows": count,
@@ -270,7 +273,7 @@ class GoogleSheetsAPI:
             if start_index < len(row):
                 del row[start_index:start_index + count]
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "deleted_columns": count,
@@ -298,7 +301,7 @@ class GoogleSheetsAPI:
         original_data = self.sheet_data[spreadsheet_id][sheet]
         self.sheet_data[spreadsheet_id][new_sheet_name] = [row[:] for row in original_data]
         
-        self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+        self.modified_times[spreadsheet_id] = self.current_time
         
         return {
             "sheet_id": new_sheet_id,
@@ -324,7 +327,7 @@ class GoogleSheetsAPI:
                 if spreadsheet_id in self.sheet_data and sheet in self.sheet_data[spreadsheet_id]:
                     self.sheet_data[spreadsheet_id][new_name] = self.sheet_data[spreadsheet_id].pop(sheet)
                 
-                self.modified_times[spreadsheet_id] = datetime.datetime.now().isoformat()
+                self.modified_times[spreadsheet_id] = self.current_time
                 
                 return {
                     "old_name": old_name,

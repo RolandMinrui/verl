@@ -1,8 +1,7 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
 import uuid
-from datetime import datetime
 import re
 
 # Section 1: Schema
@@ -15,13 +14,6 @@ class Message(BaseModel):
     timestamp: str = Field(..., description="Message timestamp")
     type: str = Field(default="text", description="Message type (text, image, file, etc.)")
 
-    @validator('phone')
-    def validate_phone(cls, v):
-        # Basic phone validation - must start with + and contain only digits and +
-        if not re.match(r'^\+\d{10,15}$', v):
-            raise ValueError('Invalid phone number format')
-        return v
-
 class Chat(BaseModel):
     """Represents a WhatsApp chat."""
     phone: str = Field(..., description="Phone number or group ID")
@@ -31,23 +23,11 @@ class Chat(BaseModel):
     last_message_time: str = Field(default="", description="Timestamp of most recent message")
     archived: bool = Field(default=False, description="Whether chat is archived")
 
-    @validator('phone')
-    def validate_phone(cls, v):
-        if not re.match(r'^\+\d{10,15}$', v):
-            raise ValueError('Invalid phone number format')
-        return v
-
 class Contact(BaseModel):
     """Represents a WhatsApp contact."""
     phone: str = Field(..., description="Phone number")
     name: str = Field(..., description="Display name")
     is_registered: bool = Field(default=False, description="Whether contact is registered on WhatsApp")
-
-    @validator('phone')
-    def validate_phone(cls, v):
-        if not re.match(r'^\+\d{10,15}$', v):
-            raise ValueError('Invalid phone number format')
-        return v
 
 class Group(BaseModel):
     """Represents a WhatsApp group."""
@@ -56,13 +36,6 @@ class Group(BaseModel):
     participants: List[str] = Field(default=[], description="List of participant phone numbers")
     created_at: str = Field(..., description="Group creation timestamp")
     description: str = Field(default="", description="Group description")
-
-    @validator('participants')
-    def validate_participants(cls, v):
-        for phone in v:
-            if not re.match(r'^\+\d{10,15}$', phone):
-                raise ValueError(f'Invalid participant phone number: {phone}')
-        return v
 
 class WhatsAppScenario(BaseModel):
     """Main scenario model for WhatsApp messaging server."""
@@ -93,6 +66,7 @@ class WhatsAppScenario(BaseModel):
         "+1903555123": True, "+1415555123": False, "+1510555123": False,
         "+1610555123": False, "+1710555123": False
     }, description="WhatsApp registration status mapping")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [Message, Chat, Contact, Group, WhatsAppScenario]
 
@@ -107,6 +81,7 @@ class WhatsAppAPI:
         self.profile: Dict[str, Any] = {}
         self.phone_validity_map: Dict[str, bool] = {}
         self.whatsapp_registered_map: Dict[str, bool] = {}
+        self.current_time: str = ""
         
     def validate_phone_format(self, phone: str) -> bool:
         """Validate phone number format."""
@@ -123,6 +98,7 @@ class WhatsAppAPI:
             self.profile = model.profile
             self.phone_validity_map = model.phone_validity_map
             self.whatsapp_registered_map = model.whatsapp_registered_map
+            self.current_time = model.current_time
         except Exception as e:
             raise ValueError(f"Invalid scenario data: {str(e)}")
 
@@ -135,7 +111,8 @@ class WhatsAppAPI:
             "groups": {group_id: group.dict() for group_id, group in self.groups.items()},
             "profile": self.profile,
             "phone_validity_map": self.phone_validity_map,
-            "whatsapp_registered_map": self.whatsapp_registered_map
+            "whatsapp_registered_map": self.whatsapp_registered_map,
+            "current_time": self.current_time
         }
 
     def whatsapp_send_text_message(self, phone: str, message: str) -> dict:
@@ -144,7 +121,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         msg = Message(
             message_id=message_id,
@@ -179,7 +156,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         content = f"Image: {image_path}"
         if caption:
@@ -218,7 +195,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         content = f"File: {file_path}"
         if caption:
@@ -258,7 +235,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         content = f"Link: {url}"
         if preview_text:
@@ -298,7 +275,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         content = f"Location: {latitude}, {longitude}"
         if name:
@@ -341,7 +318,7 @@ class WhatsAppAPI:
             raise ValueError("Invalid contact phone number format")
             
         message_id = str(uuid.uuid4())
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         content = f"Contact: {contact_name} ({contact_phone})"
             
@@ -455,7 +432,7 @@ class WhatsAppAPI:
     def whatsapp_create_group(self, name: str, participants: Optional[List[str]] = None) -> dict:
         """Create a new WhatsApp group with optional initial participants."""
         group_id = f"group_{str(uuid.uuid4())}"
-        timestamp = datetime.now().isoformat()
+        timestamp = self.current_time
         
         if participants is None:
             participants = []

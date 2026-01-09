@@ -73,7 +73,7 @@ class CalendarAPI:
         """Initialize calendar API with empty state."""
         self.calendars: Dict[str, Calendar] = {}
         self.events: Dict[str, CalendarEvent] = {}
-        self.default_calendar_id: str = ""
+        self.default_calendar_id: str = "primary"
         self.event_id_counter: int = 1
         
     def load_scenario(self, scenario: dict) -> None:

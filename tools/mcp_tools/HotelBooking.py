@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 from mcp.server.fastmcp import FastMCP
-from datetime import datetime, date
 
 # Section 1: Schema
 class Destination(BaseModel):

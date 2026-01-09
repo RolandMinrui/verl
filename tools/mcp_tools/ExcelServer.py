@@ -1,10 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Any
 from mcp.server.fastmcp import FastMCP
-import os
 import platform
 import tempfile
-from datetime import datetime
 
 # Section 1: Schema
 class SheetInfo(BaseModel):
@@ -35,6 +33,7 @@ class ExcelScenario(BaseModel):
     }, description="Supported file formats")
     max_file_size: int = Field(default=50, ge=1, le=500, description="Maximum file size in MB")
     temp_dir: str = Field(default=tempfile.gettempdir(), description="Temporary directory for operations")
+    current_time: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
 
 Scenario_Schema = [SheetInfo, CellStyle, ExcelScenario]
 
@@ -50,6 +49,7 @@ class ExcelServer:
         self.supported_formats: Dict[str, List[str]] = {}
         self.max_file_size: int = 50
         self.temp_dir: str = tempfile.gettempdir()
+        self.current_time: str = ""
         
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the server instance."""
@@ -62,6 +62,7 @@ class ExcelServer:
         self.supported_formats = model.supported_formats
         self.max_file_size = model.max_file_size
         self.temp_dir = model.temp_dir
+        self.current_time = model.current_time
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
@@ -73,21 +74,20 @@ class ExcelServer:
             "screen_captures": self.screen_captures,
             "supported_formats": self.supported_formats,
             "max_file_size": self.max_file_size,
-            "temp_dir": self.temp_dir
+            "temp_dir": self.temp_dir,
+            "current_time": self.current_time
         }
 
     def excel_describe_sheets(self, file_absolute_path: str) -> dict:
         """List all sheet information of a specified Excel file."""
-        # Simulate sheet discovery
+        # Mock sheet data based on stored state
         sheets = []
-        if os.path.exists(file_absolute_path):
-            # Mock sheet data based on stored state
-            for sheet_name, sheet_data in self.sheets.items():
-                sheets.append({
-                    "name": sheet_name,
-                    "index": len(sheets),
-                    "visibility": sheet_data.get("visibility", "visible")
-                })
+        for sheet_name, sheet_data in self.sheets.items():
+            sheets.append({
+                "name": sheet_name,
+                "index": len(sheets),
+                "visibility": sheet_data.get("visibility", "visible")
+            })
         return {"sheets": sheets}
 
     def excel_read_sheet(self, file_absolute_path: str, sheet_name: str, cell_range: Optional[str] = None, show_formula: bool = False, show_style: bool = False) -> dict:
@@ -115,7 +115,8 @@ class ExcelServer:
             raise ValueError("Screen capture is only available on Windows")
             
         capture_key = f"{sheet_name}_{cell_range or 'full'}"
-        image_path = os.path.join(self.temp_dir, f"excel_capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        timestamp_str = self.current_time.replace(":", "").replace("-", "")[:15]
+        image_path = f"{self.temp_dir}/excel_capture_{timestamp_str}.png"
         
         # Mock screen capture
         self.screen_captures[capture_key] = image_path
@@ -132,7 +133,7 @@ class ExcelServer:
             self.sheets[sheet_name] = {
                 "values": values,
                 "visibility": "visible",
-                "created": datetime.now().isoformat()
+                "created": self.current_time
             }
         else:
             # Update existing sheet
@@ -175,7 +176,7 @@ class ExcelServer:
         format_key = f"{sheet_name}_{cell_range}"
         self.formats[format_key] = {
             "styles": styles,
-            "applied_at": datetime.now().isoformat()
+            "applied_at": self.current_time
         }
         
         return {
@@ -234,7 +235,7 @@ def excel_describe_sheets(file_absolute_path: str) -> dict:
     try:
         if not file_absolute_path or not isinstance(file_absolute_path, str):
             raise ValueError("File path must be a non-empty string")
-        if not os.path.isabs(file_absolute_path):
+        if not file_absolute_path.startswith("/") and ":" not in file_absolute_path[:2]:
             raise ValueError("File path must be absolute")
         return server.excel_describe_sheets(file_absolute_path)
     except Exception as e:
