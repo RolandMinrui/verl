@@ -95,6 +95,7 @@ class AdvantageEstimator(str, Enum):
 
     GAE = "gae"
     GRPO = "grpo"
+    GDPO = "gdpo"  # Group-wise Distributional Policy Optimization
     REINFORCE_PLUS_PLUS = "reinforce_plus_plus"
     REINFORCE_PLUS_PLUS_BASELINE = "reinforce_plus_plus_baseline"
     REMAX = "remax"
@@ -324,6 +325,162 @@ def compute_grpo_outcome_advantage(
         scores = scores.unsqueeze(-1) * response_mask
 
     return scores, scores
+
+
+def _grpo_group_normalize(
+    scores: torch.Tensor,
+    index: np.ndarray,
+    epsilon: float = 1e-6,
+    norm_by_std: bool = True,
+) -> torch.Tensor:
+    """
+    Helper function to perform GRPO-style group normalization on a 1D score tensor.
+    
+    Args:
+        scores: `(torch.Tensor)` shape is (bs,)
+        index: `(np.ndarray)` index array for grouping
+        epsilon: `(float)` small value to avoid division by zero
+        norm_by_std: `(bool)` whether to normalize by standard deviation
+        
+    Returns:
+        normalized_scores: `(torch.Tensor)` shape is (bs,)
+    """
+    id2score = defaultdict(list)
+    id2mean = {}
+    id2std = {}
+    
+    bsz = scores.shape[0]
+    for i in range(bsz):
+        id2score[index[i]].append(scores[i])
+    
+    for idx in id2score:
+        if len(id2score[idx]) == 1:
+            id2mean[idx] = torch.tensor(0.0, device=scores.device)
+            id2std[idx] = torch.tensor(1.0, device=scores.device)
+        elif len(id2score[idx]) > 1:
+            scores_tensor = torch.stack(id2score[idx])
+            id2mean[idx] = torch.mean(scores_tensor)
+            id2std[idx] = torch.std(scores_tensor)
+        else:
+            raise ValueError(f"no score in prompt index: {idx}")
+    
+    normalized_scores = scores.clone()
+    for i in range(bsz):
+        if norm_by_std:
+            normalized_scores[i] = (scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
+        else:
+            normalized_scores[i] = scores[i] - id2mean[index[i]]
+    
+    return normalized_scores
+
+
+@register_adv_est(AdvantageEstimator.GDPO)  # or simply: @register_adv_est("gdpo")
+def compute_gdpo_outcome_advantage(
+    token_level_rewards: torch.Tensor,
+    response_mask: torch.Tensor,
+    index: np.ndarray,
+    epsilon: float = 1e-6,
+    norm_adv_by_std_in_grpo: bool = True,
+    config: Optional[AlgoConfig] = None,
+    reward_components: Optional[dict[str, torch.Tensor]] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute advantage for GDPO (Group-wise Distributional Policy Optimization).
+    
+    GDPO decomposes the total reward into multiple meaningful components and
+    independently normalizes each component using GRPO's group normalization,
+    then combines them with weighted sum.
+    
+    Args:
+        token_level_rewards: `(torch.Tensor)`
+            shape is (bs, response_length) - the combined reward (used as fallback)
+        response_mask: `(torch.Tensor)`
+            shape is (bs, response_length)
+        index: `(np.ndarray)`
+            index array for grouping
+        epsilon: `(float)`
+            small value to avoid division by zero
+        norm_adv_by_std_in_grpo: `(bool)`
+            whether to scale the advantage by std
+        config: `(Optional[AlgoConfig])`
+            algorithm configuration object, may contain:
+            - gdpo_trace_weight: weight for trace_score (default: 0.5)
+            - gdpo_state_weight: weight for state_score (default: 0.5)
+            - gdpo_length_weight: weight for length_penalty (default: 1.0)
+        reward_components: `(Optional[dict[str, torch.Tensor]])`
+            dictionary containing decomposed reward components:
+            - trace_score: (bs,) tensor of trace scores
+            - state_score: (bs,) tensor of state scores
+            - length_penalty: (bs,) tensor of length penalties
+            
+    Returns:
+        advantages: `(torch.Tensor)` shape is (bs, response_length)
+        returns: `(torch.Tensor)` shape is (bs, response_length)
+    """
+    with torch.no_grad():
+        # If reward_components is provided, use GDPO decomposition
+        if reward_components is not None:
+            # Get weights from config or use defaults
+            trace_weight = config.get("gdpo_trace_weight", 0.5) if config else 0.5
+            state_weight = config.get("gdpo_state_weight", 0.5) if config else 0.5
+            length_weight = config.get("gdpo_length_weight", 1.0) if config else 1.0
+            
+            # Extract individual components
+            trace_scores = reward_components.get("trace_score")
+            state_scores = reward_components.get("state_score")
+            length_penalties = reward_components.get("length_penalty")
+            
+            combined_advantage = torch.zeros(token_level_rewards.shape[0], device=token_level_rewards.device)
+            
+            # Normalize trace_score independently using GRPO group normalization
+            if trace_scores is not None:
+                normalized_trace = _grpo_group_normalize(
+                    scores=trace_scores,
+                    index=index,
+                    epsilon=epsilon,
+                    norm_by_std=norm_adv_by_std_in_grpo,
+                )
+                combined_advantage = combined_advantage + trace_weight * normalized_trace
+            
+            # Normalize state_score independently using GRPO group normalization
+            if state_scores is not None:
+                normalized_state = _grpo_group_normalize(
+                    scores=state_scores,
+                    index=index,
+                    epsilon=epsilon,
+                    norm_by_std=norm_adv_by_std_in_grpo,
+                )
+                combined_advantage = combined_advantage + state_weight * normalized_state
+            
+            # Length penalty is subtracted (it's a penalty, not a reward)
+            # We still normalize it for consistency
+            if length_penalties is not None:
+                normalized_length = _grpo_group_normalize(
+                    scores=length_penalties,
+                    index=index,
+                    epsilon=epsilon,
+                    norm_by_std=norm_adv_by_std_in_grpo,
+                )
+                combined_advantage = combined_advantage - length_weight * normalized_length
+            
+            # Apply masked_whiten for global normalization
+            response_length = token_level_rewards.shape[-1]
+            advantages = combined_advantage.unsqueeze(-1).expand(-1, response_length) * response_mask
+            advantages = verl_F.masked_whiten(advantages, response_mask) * response_mask
+            
+        else:
+            # Fallback to standard GRPO if no components provided
+            scores = token_level_rewards.sum(dim=-1)
+            normalized_scores = _grpo_group_normalize(
+                scores=scores,
+                index=index,
+                epsilon=epsilon,
+                norm_by_std=norm_adv_by_std_in_grpo,
+            )
+            advantages = normalized_scores.unsqueeze(-1) * response_mask
+    
+    return advantages, advantages
 
 
 @register_adv_est(AdvantageEstimator.GRPO_PASSK)  # or simply: @register_adv_est("grpo_passk")

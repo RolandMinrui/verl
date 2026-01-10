@@ -113,6 +113,9 @@ def _compute_length_penalty(solution: list[dict], ground_truth: list[dict]) -> f
     if not ground_truth:
         return 0.0
     
+    if not solution:
+        return 0.0
+    
     ratio = len(solution) / len(ground_truth)
     if ratio > 2.0:
         return min(0.3, (ratio - 2.0) * 0.1)
@@ -120,17 +123,24 @@ def _compute_length_penalty(solution: list[dict], ground_truth: list[dict]) -> f
         return min(0.1, (ratio - 1.5) * 0.2)
     return 0.0
 
-def compute_score(solution: str, ground_truth: str, extra_info: dict = None) -> float:
+
+def compute_score(solution: str, ground_truth: str, extra_info: dict = None) -> dict:
     """
     Calculate the reward for tool calling agent,.
     
     Args:
         solution: the solution text containing tool_calls
-        ground_truth: the correct answer tool_call sequence
-        extra_info: extra information
+        ground_truth: the correct answer tool_call sequence (JSON string)
+        extra_info: extra information containing:
+            - sol_final_config: solution's final MCP server configuration
+            - gts_final_config: ground truth's final MCP server configuration
     
     Returns:
-        reward (str) = w1 * trace_score + w2 * state_score - length_penalty
+        dict containing:
+            - score: total weighted score = w1 * trace_score + w2 * state_score - length_penalty
+            - trace_score: score for correct tool call sequence
+            - state_score: score for correct final state
+            - length_penalty: penalty for overly long sequences
     """
     try:
         sol_calls = extract_tool_calls(solution)

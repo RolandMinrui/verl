@@ -238,8 +238,33 @@ def compute_advantage(
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
+    elif adv_estimator == core_algos.AdvantageEstimator.GDPO:
+        # GDPO: Group-wise Distributional Policy Optimization
+        # Build reward_components dict from non_tensor_batch if available
+        reward_components = None
+        if "trace_score" in data.non_tensor_batch or "state_score" in data.non_tensor_batch:
+            reward_components = {}
+            for key in ["trace_score", "state_score", "length_penalty"]:
+                if key in data.non_tensor_batch:
+                    # Convert numpy array to tensor
+                    reward_components[key] = torch.tensor(
+                        data.non_tensor_batch[key],
+                        dtype=torch.float32,
+                        device=data.batch["token_level_rewards"].device
+                    )
+        
+        advantages, returns = core_algos.compute_gdpo_outcome_advantage(
+            token_level_rewards=data.batch["token_level_rewards"],
+            response_mask=data.batch["response_mask"],
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            config=config,
+            reward_components=reward_components,
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
     else:
-        # handle all other adv estimator type other than GAE and GRPO
+        # handle all other adv estimator type other than GAE, GRPO and GDPO
         adv_estimator_fn = core_algos.get_adv_estimator_fn(adv_estimator)
         adv_kwargs = {
             "token_level_rewards": data.batch["token_level_rewards"],
