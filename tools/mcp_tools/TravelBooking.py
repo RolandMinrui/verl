@@ -1,16 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, cast
 from mcp.server.fastmcp import FastMCP
 import uuid
 import random
+import hashlib
 
 # Section 1: Schema
-class User(BaseModel):
-    """Represents an authenticated user."""
+class RegisteredUser(BaseModel):
+    """Represents a registered user account."""
     client_id: str = Field(..., description="Client application ID")
+    client_secret: str = Field(..., description="Client application secret")
     first_name: str = Field(..., description="User's first name")
     last_name: str = Field(..., description="User's last name")
+
+class Session(BaseModel):
+    """Represents an authenticated user session."""
     access_token: str = Field(..., description="Access token for API calls")
+    client_id: str = Field(..., description="Client application ID")
     token_type: str = Field(default="Bearer", description="Token type")
     expires_in: int = Field(..., ge=0, description="Token expiration time in seconds")
     scope: str = Field(..., description="Granted permissions scope")
@@ -51,7 +57,8 @@ class Booking(BaseModel):
 
 class TravelBookingScenario(BaseModel):
     """Main scenario model for travel booking system."""
-    authenticated_users: Dict[str, User] = Field(default={}, description="Currently authenticated users")
+    registered_users: Dict[str, RegisteredUser] = Field(default={}, description="Registered user accounts")
+    authenticated_users: Dict[str, Session] = Field(default={}, description="Currently authenticated users")
     available_flights: Dict[str, List[Flight]] = Field(default={}, description="Available flights by route key")
     airport_city_map: Dict[str, str] = Field(default={
         "Rivermist": "RVM", "Stonebrook": "STB", "Maplecrest": "MPC", "Silverpine": "SVP", "Shadowridge": "SHR",
@@ -72,14 +79,16 @@ class TravelBookingScenario(BaseModel):
     insurance_policies: Dict[str, dict] = Field(default={}, description="Purchased insurance policies")
     support_tickets: List[dict] = Field(default=[], description="Customer support tickets")
     current_time: str = Field(default="2024-01-01T00:00:00", pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", description="Current timestamp in ISO 8601 format")
+    random_seed: Optional[int] = Field(default=42, description="Random seed for reproducible scenarios")
 
-Scenario_Schema = [User, Flight, CreditCard, Booking, TravelBookingScenario]
+Scenario_Schema = [RegisteredUser, Session, Flight, CreditCard, Booking, TravelBookingScenario]
 
 # Section 2: Class
 class TravelBookingAPI:
     def __init__(self):
         """Initialize travel booking API with empty state."""
-        self.authenticated_users: Dict[str, User] = {}
+        self.registered_users: Dict[str, RegisteredUser] = {}
+        self.authenticated_users: Dict[str, Session] = {}
         self.available_flights: Dict[str, List[Flight]] = {}
         self.airport_city_map: Dict[str, str] = {}
         self.credit_cards: Dict[str, CreditCard] = {}
@@ -91,10 +100,37 @@ class TravelBookingAPI:
         self.insurance_policies: Dict[str, dict] = {}
         self.support_tickets: List[dict] = []
         self.current_time: str = "2024-01-01T00:00:00"
+        self.random_seed: Optional[int] = 42
+        self.uuid_counter: int = 0
+    
+    def _generate_deterministic_uuid(self) -> str:
+        """Generate deterministic UUID based on random_seed and counter."""
+        # Use seed and counter to generate deterministic UUID
+        seed = cast(int, self.random_seed)
+        # Combine seed and counter as string, then hash
+        combined_str = f"{seed}_{self.uuid_counter}"
+        combined_bytes = combined_str.encode('utf-8')
+        hash_obj = hashlib.md5(combined_bytes)
+        hash_hex = hash_obj.hexdigest()
+        
+        # Format as UUID
+        uuid_str = f"{hash_hex[:8]}-{hash_hex[8:12]}-{hash_hex[12:16]}-{hash_hex[16:20]}-{hash_hex[20:32]}"
+        self.uuid_counter += 1
+        return uuid_str
+    
+    def _generate_deterministic_random_int(self, min_val: int, max_val: int) -> int:
+        """Generate deterministic random integer based on random_seed."""
+        # Use counter to generate deterministic random number
+        seed = cast(int, self.random_seed)
+        random.seed(seed + self.uuid_counter)
+        result = random.randint(min_val, max_val)
+        self.uuid_counter += 1
+        return result
 
     def load_scenario(self, scenario: dict) -> None:
         """Load scenario data into the API instance."""
         model = TravelBookingScenario(**scenario)
+        self.registered_users = model.registered_users
         self.authenticated_users = model.authenticated_users
         self.available_flights = model.available_flights
         self.airport_city_map = model.airport_city_map
@@ -107,10 +143,14 @@ class TravelBookingAPI:
         self.insurance_policies = model.insurance_policies
         self.support_tickets = model.support_tickets
         self.current_time = model.current_time
+        self.random_seed = model.random_seed
+        self.uuid_counter = 0
+        random.seed(self.random_seed)
 
     def save_scenario(self) -> dict:
         """Save current state as scenario dictionary."""
         return {
+            "registered_users": {cid: user.dict() for cid, user in self.registered_users.items()},
             "authenticated_users": {uid: user.dict() for uid, user in self.authenticated_users.items()},
             "available_flights": {route: [flight.dict() for flight in flights] for route, flights in self.available_flights.items()},
             "airport_city_map": self.airport_city_map,
@@ -122,23 +162,37 @@ class TravelBookingAPI:
             "insurance_quotes": self.insurance_quotes,
             "insurance_policies": self.insurance_policies,
             "support_tickets": self.support_tickets,
-            "current_time": self.current_time
+            "current_time": self.current_time,
+            "random_seed": self.random_seed
         }
 
     def authenticate(self, client_id: str, client_secret: str, grant_type: str, first_name: str, last_name: str) -> dict:
-        """Authenticate user and return access token."""
-        access_token = str(uuid.uuid4())
-        user = User(
-            client_id=client_id,
-            first_name=first_name,
-            last_name=last_name,
+        """Authenticate user and return access token. Only verifies existing registered users."""
+        # Check if user is registered
+        if client_id not in self.registered_users:
+            raise ValueError(f"User with client_id '{client_id}' is not registered")
+        
+        registered_user = self.registered_users[client_id]
+        
+        # Verify client_secret
+        if registered_user.client_secret != client_secret:
+            raise ValueError("Invalid client_secret")
+        
+        # Verify user information matches
+        if registered_user.first_name != first_name or registered_user.last_name != last_name:
+            raise ValueError("User information does not match registered account")
+        
+        # Generate access token for authenticated user
+        access_token = self._generate_deterministic_uuid()
+        session = Session(
             access_token=access_token,
+            client_id=client_id,
             token_type="Bearer",
             expires_in=3600,
             scope=grant_type,
             created_at=self.current_time
         )
-        self.authenticated_users[access_token] = user
+        self.authenticated_users[access_token] = session
         return {
             "access_token": access_token,
             "token_type": "Bearer",
@@ -183,14 +237,14 @@ class TravelBookingAPI:
         if access_token not in self.authenticated_users:
             raise ValueError("Invalid access token")
         
-        card_id = str(uuid.uuid4())
+        card_id = self._generate_deterministic_uuid()
         last_4 = card_number[-4:] if len(card_number) >= 4 else card_number
         card = CreditCard(
             card_id=card_id,
             card_number=last_4,
             cardholder_name=cardholder_name,
             expiration_date=expiration_date,
-            balance=random.randint(1000, 10000)
+            balance=self._generate_deterministic_random_int(1000, 10000)
         )
         self.credit_cards[card_id] = card
         return {
@@ -228,7 +282,8 @@ class TravelBookingAPI:
         if card_id not in self.credit_cards:
             raise ValueError("Card not found")
         
-        user = self.authenticated_users[access_token]
+        session = self.authenticated_users[access_token]
+        registered_user = self.registered_users[session.client_id]
         card = self.credit_cards[card_id]
         
         route_key = f"{departure_airport}-{arrival_airport}"
@@ -243,13 +298,13 @@ class TravelBookingAPI:
         if flight.cost > card.balance:
             raise ValueError("Insufficient card balance")
         
-        booking_id = str(uuid.uuid4())
-        transaction_id = str(uuid.uuid4())
+        booking_id = self._generate_deterministic_uuid()
+        transaction_id = self._generate_deterministic_uuid()
         
         if not traveler_first_name:
-            traveler_first_name = user.first_name
+            traveler_first_name = registered_user.first_name
         if not traveler_last_name:
-            traveler_last_name = user.last_name
+            traveler_last_name = registered_user.last_name
         
         booking = Booking(
             booking_id=booking_id,
@@ -313,7 +368,7 @@ class TravelBookingAPI:
             raise ValueError("Booking already cancelled")
         
         booking.booking_status = "cancelled"
-        refund_transaction_id = str(uuid.uuid4())
+        refund_transaction_id = self._generate_deterministic_uuid()
         
         return {
             "cancellation_status": True,
@@ -387,7 +442,7 @@ class TravelBookingAPI:
         if insurance_cost > card.balance:
             raise ValueError("Insufficient card balance")
         
-        insurance_id = str(uuid.uuid4())
+        insurance_id = self._generate_deterministic_uuid()
         policy = {
             "insurance_id": insurance_id,
             "insurance_type": insurance_type,
@@ -453,7 +508,7 @@ class TravelBookingAPI:
         if access_token not in self.authenticated_users:
             raise ValueError("Invalid access token")
         
-        ticket_id = str(uuid.uuid4())
+        ticket_id = self._generate_deterministic_uuid()
         ticket = {
             "support_ticket_id": ticket_id,
             "subject": subject or "General Inquiry",

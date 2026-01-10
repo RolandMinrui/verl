@@ -19,10 +19,21 @@ def parse_ground_truth(ground_truth: str | list[dict]) -> list[str]:
         ground_truth_calls = json.loads(ground_truth)
     except:
         ground_truth_calls = []
+    return ground_truth_calls
 
 def extract_tool_calls(text: str) -> list[str]:
     """Extract tool_call from text"""
     tool_calls = []
+    
+    matches = TOOL_CALL_PATTERN.findall(text)
+    for match in matches:
+        try:
+            tool_call = json.loads(match)
+            if "name" in tool_call and "arguments" in tool_call:
+                tool_calls.append(tool_call)
+        except Exception as e:
+            continue
+
     return tool_calls
 
 def extract_mcp_servers(gt_calls: list[str]) -> list[str]:
