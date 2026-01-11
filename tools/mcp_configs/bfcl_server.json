@@ -1,43 +1,43 @@
 {
     "mcpServers": {
         "Airline": {
-            "tool_path": "envs/tools/Airline.py",
+            "tool_path": "tools/mcp_tools/Airline.py",
             "stateless": false
         },
         "Posting": {
-            "tool_path": "envs/tools/Posting.py",
+            "tool_path": "tools/mcp_tools/Posting.py",
             "stateless": false
         },
         "Retail": {
-            "tool_path": "envs/tools/Retail.py",
+            "tool_path": "tools/mcp_tools/Retail.py",
             "stateless": false
         },
         "Message": {
-            "tool_path": "envs/tools/Message.py",
+            "tool_path": "tools/mcp_tools/Message.py",
             "stateless": false
         },
         "Telecom": {
-            "tool_path": "envs/tools/Telecom.py",
+            "tool_path": "tools/mcp_tools/Telecom.py",
             "stateless": false
         },
         "TicketManagementSystem": {
-            "tool_path": "envs/tools/TicketManagementSystem.py",
+            "tool_path": "tools/mcp_tools/TicketManagementSystem.py",
             "stateless": false
         },
         "TradingBot": {
-            "tool_path": "envs/tools/TradingBot.py",
+            "tool_path": "tools/mcp_tools/TradingBot.py",
             "stateless": false
         },
         "TravelBooking": {
-            "tool_path": "envs/tools/TravelBooking.py",
+            "tool_path": "tools/mcp_tools/TravelBooking.py",
             "stateless": false
         },
         "VehicleControl": {
-            "tool_path": "envs/tools/VehicleControl.py",
+            "tool_path": "tools/mcp_tools/VehicleControl.py",
             "stateless": false
         },
         "GorillaFileSystem": {
-            "tool_path": "envs/tools/GorillaFileSystem.py",
+            "tool_path": "tools/mcp_tools/GorillaFileSystem.py",
             "stateless": false
         }
     }
