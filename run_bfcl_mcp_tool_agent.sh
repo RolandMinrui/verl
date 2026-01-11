@@ -14,7 +14,7 @@ EXP_NAME="qwen3-1.7b-bfcl-n16-vllm-think"
 python3 -m verl.trainer.main_ppo \
     --config-path="$CONFIG_PATH" \
     --config-name="$CONFIG_NAME" \
-    algorithm.adv_estimator=grpo \
+    algorithm.adv_estimator=gdpo \
     data.train_batch_size=1 \
     data.max_prompt_length=2048 \
     data.max_response_length=1024 \
@@ -55,4 +55,6 @@ python3 -m verl.trainer.main_ppo \
     data.train_files=$PROJECT_DIR/data/BFCL/multi-turn/train.parquet \
     data.val_files=$PROJECT_DIR/data/BFCL/multi-turn/test.parquet \
     actor_rollout_ref.rollout.multi_turn.tool_config_path="$PROJECT_DIR/tools/mcp_configs/bfcl_mcp_server.json" \
-    trainer.total_epochs=1 $@
+    trainer.total_epochs=1 $@ \
+    custom_reward_function.path=$PROJECT_DIR/recipe/tool_agent/tool_agent_rule_based.py\
+    custom_reward_function.name=compute_score \
