@@ -39,7 +39,7 @@ def extract_tool_calls(text: str) -> list[str]:
 def extract_mcp_servers(gt_calls: list[str]) -> list[str]:
     mcp_servers = set()
     for gt_call in gt_calls:
-        mcp_server = gt_call.split("-")[0]  
+        mcp_server = gt_call["name"].split("-")[0]
         mcp_servers.add(mcp_server)
     return list(mcp_servers)
 
