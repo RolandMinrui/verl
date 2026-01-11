@@ -429,7 +429,6 @@ class MCPClientManager:
             if isinstance(tool_args, str):
                 tool_args = json.loads(tool_args)
             result = await client.call_tool(tool_name, tool_args)
-        print('result:', result)
         
         all_texts = [item.text for item in result.content if hasattr(item, 'text')]
         tool_result = ','.join(all_texts) if all_texts else ''
