@@ -54,7 +54,7 @@ python3 -m verl.trainer.main_ppo \
     data.log_dump_path=$PROJECT_DIR/log/$EXP_NAME/$TIMESTAMP.jsonl \
     data.train_files=$PROJECT_DIR/data/BFCL/multi-turn/train.parquet \
     data.val_files=$PROJECT_DIR/data/BFCL/multi-turn/test.parquet \
-    actor_rollout_ref.rollout.multi_turn.tool_config_path="$PROJECT_DIR/tools/mcp_configs/bfcl_mcp_server.json" \
+    actor_rollout_ref.rollout.multi_turn.tool_config_path=$PROJECT_DIR/tools/mcp_configs/bfcl_mcp_server.json \
     trainer.total_epochs=1 $@ \
     custom_reward_function.path=$PROJECT_DIR/recipe/tool_agent/tool_agent_rule_based.py\
     custom_reward_function.name=compute_score \
