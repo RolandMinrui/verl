@@ -55,7 +55,7 @@ def default_compute_score(
 
         # from . import math_verify
         # res = math_verify.compute_score(solution_str, ground_truth)
-    elif data_source in ['tool-agent']:
+    elif data_source in ["tool-agent", "ToolAgent"]:
         from . import tool_agent
         res = tool_agent.compute_score(solution_str, ground_truth, extra_info)
         
