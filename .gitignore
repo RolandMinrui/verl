@@ -12,6 +12,7 @@
 **/tensorboard_log
 **/rollout_data_dir
 **/rollout_trace
+*.parquet
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

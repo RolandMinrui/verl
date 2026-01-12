@@ -477,8 +477,3 @@ class MCPClientManager:
 
     def __del__(self):
         self.shutdown()
-
-
-MCPManager = MCPClientManager()
-if not os.environ.get("SKIP_MCP_AUTO_INIT"):
-    MCPManager.init_config("tools/mcp_configs/mcp_server.json")
