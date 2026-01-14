@@ -62,7 +62,6 @@ def extract_mcp_servers(gt_calls: list[str]) -> list[str]:
         mcp_servers.add(mcp_server)
     return list(mcp_servers)
 
-
 def _check_tool_call_match(sol_call: dict, gt_call: dict) -> bool:
     """
     Check if a solution call matches a ground truth call, respecting masked_arguments.
@@ -130,7 +129,6 @@ def _compute_trace_score(solution: list[dict], ground_truth: list[dict]) -> floa
 
     return 1.0
 
-
 def _compute_state_score(solution: str | dict, ground_truth: str | dict, mcp_servers: list[str]) -> float:
     def _ensure_dict(obj: str | dict) -> dict | None:
         if isinstance(obj, dict):
@@ -169,19 +167,16 @@ def _compute_length_penalty(solution: list[dict], ground_truth: list[dict]) -> f
         return min(0.1, (ratio - 1.5) * 0.2)
     return 0.0
 
-
-def compute_score(data_source=None, solution_str: str = None, ground_truth: str = None, extra_info: dict = None, solution: str = None, **kwargs) -> dict:
+def compute_score(solution: str, ground_truth: str, extra_info: dict = None) -> dict:
     """
     Calculate the reward for tool calling agent,.
     
     Args:
-        data_source: the data source identifier (optional, for compatibility with framework)
-        solution_str: the solution text containing tool_calls (preferred parameter name)
+        solution: the solution text containing tool_calls
         ground_truth: the correct answer tool_call sequence (JSON string)
         extra_info: extra information containing:
             - sol_final_config: solution's final MCP server configuration
             - gts_final_config: ground truth's final MCP server configuration
-        solution: deprecated, use solution_str instead (for backward compatibility)
     
     Returns:
         dict containing:
@@ -190,27 +185,8 @@ def compute_score(data_source=None, solution_str: str = None, ground_truth: str 
             - state_score: score for correct final state
             - length_penalty: penalty for overly long sequences
     """
-    # Handle backward compatibility: if solution is provided but solution_str is not, use solution
-    if solution_str is None and solution is not None:
-        solution_str = solution
-    
-    if solution_str is None:
-        logger.warning("compute_score: solution_str is None")
-        return {
-            "score": 0.0,
-            "trace_score": 0.0,
-            "state_score": 0.0,
-            "length_penalty": 0.0,
-        }
-    
-    if ground_truth is None:
-        ground_truth = ""
-    
-    if extra_info is None:
-        extra_info = {}
-    
     try:
-        sol_calls = extract_tool_calls(solution_str)
+        sol_calls = extract_tool_calls(solution)
         gt_calls = parse_ground_truth(ground_truth)
         mcp_servers = extract_mcp_servers(gt_calls)
 
